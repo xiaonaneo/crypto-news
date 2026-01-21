@@ -25,211 +25,104 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyyaml requests feedparser python-telegram-bot apscheduler beautifulsoup4 lxml python-dotenv
+          pip install pyyaml requests feedparser python-telegram-bot beautifulsoup4 lxml python-dotenv
       
       - name: Create .env file
         run: |
           echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" > .env
           echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
-          echo "CRYPTO_KEYWORDS=bitcoin,ethereum,crypto,cryptocurrency,blockchain,btc,eth,solana" >> .env
-          echo "RSS_HOURS_LOOKBACK=24" >> .env
-          echo "MAX_ARTICLES=15" >> .env
       
-      - name: Create SSL-patched RSS fetcher
+      - name: Create SSL fetcher
         run: |
-          cat > modules/rss_fetcher_ssl.py << 'HEREDOC_EOF'
-import feedparser
-import ssl
-import urllib.request
+          cat > modules/rss_ssl.py << 'END'
+import feedparser, ssl, urllib.request, logging
 from datetime import datetime, timedelta
-from typing import List, Dict
-import hashlib
-import re
-import logging
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-def create_unverified_ssl_context():
-    context = ssl.create_default_context()
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    return context
-
-_original_urlopen = urllib.request.urlopen
-
-def _patched_urlopen(url, *args, **kwargs):
-    try:
-        return _original_urlopen(url, *args, **kwargs, context=create_unverified_ssl_context())
-    except Exception:
+ctx = ssl.create_default_context()
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
+_orig = urllib.request.urlopen
+def _patch(url, *a, **k):
+    try: return _orig(url, *a, **k, context=ctx)
+    except:
         import urllib.request
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=30) as response:
-            return response
+        return urllib.request.urlopen(urllib.request.Request(url), timeout=30)
+urllib.request.urlopen = _patch
 
-urllib.request.urlopen = _patched_urlopen
-
-class RSSFetcher:
-    def __init__(self, config: dict):
-        self.config = config
-        self.feeds = config.get('rss_sources', [])
-        self.crypto_keywords = config.get('crypto_keywords', [])
-        self.lookback_hours = 24
+class Fetcher:
+    def __init__(self):
+        self.feeds = [
+            {'name': 'CoinTelegraph', 'url': 'https://cointelegraph.com/rss', 'enabled': True, 'priority': 2, 'crypto_only': True},
+            {'name': 'CoinDesk', 'url': 'https://www.coindesk.com/arc/outboundfeeds/rss/', 'enabled': True, 'priority': 2, 'crypto_only': True},
+        ]
     
-    def is_crypto_related(self, title: str = "", summary: str = "", crypto_only: bool = False) -> bool:
-        if crypto_only:
-            return True
-        if not title and not summary:
-            return True
-        text = f"{title} {summary}".lower()
-        return any(kw.lower() in text for kw in self.crypto_keywords)
-    
-    def get_article_hash(self, url: str) -> str:
-        return hashlib.md5(url.encode()).hexdigest()
-    
-    def parse_date(self, entry) -> datetime:
-        try:
-            if hasattr(entry, 'published_parsed') and entry.published_parsed:
-                return datetime(*entry.published_parsed[:6])
-        except:
-            pass
-        return datetime.now()
-    
-    def clean_text(self, text: str, max_length: int = 200) -> str:
-        if not text:
-            return ""
-        text = re.sub(r'<[^>]+>', '', text)
-        text = ' '.join(text.split())
-        if len(text) > max_length:
-            text = text[:max_length] + "..."
-        return text.strip()
-    
-    def fetch_feed(self, feed_info: dict) -> List[Dict]:
+    def fetch_all(self):
         articles = []
-        if not feed_info.get('enabled', True):
-            return articles
-        
-        try:
-            logger.info(f"Fetching: {feed_info['name']}")
-            feed = feedparser.parse(feed_info['url'])
-            cutoff_time = datetime.now() - timedelta(hours=self.lookback_hours)
-            crypto_only = feed_info.get('crypto_only', False)
-            
-            for entry in feed.entries[:50]:
-                pub_date = self.parse_date(entry)
-                if pub_date < cutoff_time:
-                    continue
-                
-                title = entry.get('title', '')
-                summary = entry.get('summary', entry.get('description', ''))
-                
-                if not self.is_crypto_related(title, summary, crypto_only):
-                    continue
-                
-                article = {
-                    'hash': self.get_article_hash(entry.link),
-                    'source': feed_info['name'],
-                    'source_priority': feed_info.get('priority', 1),
-                    'title': self.clean_text(title),
-                    'url': entry.link,
-                    'summary': self.clean_text(summary, 300),
-                    'published': pub_date,
-                    'engagement': 0
-                }
-                articles.append(article)
-            
-            logger.info(f"✓ {feed_info['name']}: {len(articles)} articles")
-        except Exception as e:
-            logger.error(f"✗ Error {feed_info['name']}: {e}")
-        
-        return articles
-    
-    def fetch_all(self) -> List[Dict]:
-        all_articles = []
-        for feed in self.feeds:
-            articles = self.fetch_feed(feed)
-            all_articles.extend(articles)
-        
-        all_articles.sort(key=lambda x: (-x['source_priority'], x['published']), reverse=True)
-        logger.info(f"Total: {len(all_articles)} articles from {len(self.feeds)} feeds")
-        return all_articles
-HEREDOC_EOF
+        for f in self.feeds:
+            if not f['enabled']: continue
+            try:
+                feed = feedparser.parse(f['url'])
+                for e in feed.entries[:30]:
+                    try:
+                        if hasattr(e, 'published_parsed') and e.published_parsed:
+                            d = datetime(*e.published_parsed[:6])
+                            if d < datetime.now() - timedelta(hours=24): continue
+                        articles.append({
+                            'title': e.get('title', '')[:100],
+                            'source': f['name'],
+                            'url': e.link,
+                            'published': d if 'd' in dir() else datetime.now()
+                        })
+                    except: pass
+            except Exception as ex:
+                logger.error(f"Error {f['name']}: {ex}")
+        return articles[:10]
+END
+          mv modules/rss_ssl.py modules/rss_fetcher_ssl.py
       
-      - name: Create main program
+      - name: Create sender
         run: |
-          cat > send_news.py << 'HEREDOC_EOF'
-import sys, os, yaml, logging
+          cat > sender.py << 'END'
+import os, yaml, logging, sys
 from datetime import datetime
-from modules.rss_fetcher_ssl import RSSFetcher
+from modules.rss_fetcher_ssl import Fetcher
 import requests
 
 with open('config.yaml', 'r') as f:
     config = yaml.safe_load(f)
 
-TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
-CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
+TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
+CHAT_ID = os.environ['TELEGRAM_CHAT_ID']
 
 print("=" * 70)
-print("🚀 Crypto News Briefing - GitHub Actions")
+print("🚀 Crypto News Briefing")
 print("=" * 70)
 print()
 
-print("📥 Fetching crypto news...")
-fetcher = RSSFetcher(config)
+print("📥 Fetching news...")
+fetcher = Fetcher()
 articles = fetcher.fetch_all()
 print(f"   Found {len(articles)} articles")
 print()
 
-articles = articles[:10]
+msg = ["📰 *Crypto News Briefing*", f"_{datetime.now().strftime('%Y-%m-%d %H:%M')}_", ""]
+for i, a in enumerate(articles, 1):
+    emoji = "📰" if a['source'] == 'CoinTelegraph' else "📊"
+    msg.append(f"{emoji} *{i}. {a['title']}*")
+    msg.append(f"   📍 {a['source']}")
+    msg.append("")
+msg.extend(["-"*30, "", "🤖 Automated Crypto News Briefing"])
 
-message_lines = [
-    "📰 *Crypto News Briefing*",
-    f"_{datetime.now().strftime('%Y-%m-%d %H:%M UTC')}_",
-    "",
-    f"📊 Found {len(articles)} crypto articles",
-    "",
-    "-" * 30,
-    ""
-]
-
-for i, article in enumerate(articles, 1):
-    emoji = "📰" if article['source'] == 'CoinTelegraph' else "📊"
-    message_lines.append(f"{emoji} *{i}. {article['title']}*")
-    message_lines.append("")
-    message_lines.append(f"   📍 {article['source']} • 🕐 {article['published'].strftime('%H:%M')}")
-    message_lines.append("")
-
-message_lines.extend([
-    "-" * 30,
-    "",
-    "🤖 *Automated Crypto News Briefing*",
-    "📡 Sources: CoinTelegraph, CoinDesk"
-])
-
-message = "\n".join(message_lines)
-
-print("📤 Sending to Telegram...")
-resp = requests.post(
-    f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-    json={
-        "chat_id": CHAT_ID,
-        "text": message,
-        "parse_mode": "Markdown",
-        "disable_web_page_preview": True
-    },
-    timeout=30
-)
-
-if resp.status_code == 200:
-    print()
-    print("=" * 70)
-    print("✅ SUCCESS! News sent to Telegram!")
-    print("=" * 70)
+r = requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+    json={"chat_id": CHAT_ID, "text": "\n".join(msg), "parse_mode": "Markdown"})
+if r.status_code == 200:
+    print("✅ Sent to Telegram!")
 else:
-    print(f"❌ FAILED: {resp.status_code}")
+    print(f"❌ Failed: {r.status_code}")
     sys.exit(1)
-HEREDOC_EOF
+END
       
-      - name: Send crypto news
-        run: python send_news.py
+      - name: Send news
+        run: python sender.py
 
