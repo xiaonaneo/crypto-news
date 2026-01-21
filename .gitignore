@@ -1,0 +1,47 @@
+# Environment
+.env
+.env.local
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/*.log
+*.log
+
+# Database
+data/*.db
+data/*.sqlite
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# Secrets
+*.pem
+*.key
+*.crt
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride

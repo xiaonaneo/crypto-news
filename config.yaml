@@ -1,0 +1,109 @@
+# Crypto News Briefing Configuration
+
+# RSS Feed Sources (Updated with working feeds)
+rss_sources:
+  - name: CoinTelegraph
+    url: https://cointelegraph.com/rss
+    enabled: true
+    priority: 2
+    crypto_only: true
+  
+  - name: CoinDesk
+    url: https://www.coindesk.com/arc/outboundfeeds/rss/
+    enabled: true
+    priority: 2
+    crypto_only: true
+  
+  - name: CryptoSlate
+    url: https://cryptoslate.com/feed/
+    enabled: true
+    priority: 2
+    crypto_only: true
+  
+  - name: Bitcoin Magazine
+    url: https://bitcoinmagazine.com/feed
+    enabled: true
+    priority: 1
+    crypto_only: true
+  
+  - name: Decrypt
+    url: https://decrypt.com/feed
+    enabled: true
+    priority: 2
+    crypto_only: true
+
+# Cryptocurrency Keywords for Filtering
+crypto_keywords:
+  - bitcoin
+  - ethereum
+  - cryptocurrency
+  - crypto
+  - blockchain
+  - btc
+  - eth
+  - solana
+  - binance
+  - coinbase
+  - defi
+  - nft
+  - web3
+  - miner
+  - halving
+  - ETF
+  - sec
+  - federal reserve
+  - inflation
+
+# Twitter/X Analysts to Follow
+analysts:
+  - handle: vitalikbuterin
+    name: Vitalik Buterin
+    weight: 1.0
+  
+  - handle: balajis
+    name: Balaji Srinivasan
+    weight: 1.0
+  
+  - handle: cz_binance
+    name: CZ Binance
+    weight: 1.0
+
+# Scheduling Configuration
+scheduler:
+  interval_hours: 2
+  timezone: UTC
+  run_at_start: true
+
+# Processing Configuration
+processing:
+  hours_lookback: 24
+  max_articles: 15
+  deduplication: true
+  ranking:
+    recency_weight: 0.4
+    source_weight: 0.3
+    engagement_weight: 0.3
+
+# Summary Configuration
+summary:
+  length_limit: 100
+  use_llm: false
+  model: claude-sonnet-4-20250514
+
+# Telegram Configuration
+telegram:
+  max_message_length: 4000
+  parse_mode: Markdown
+  retry_attempts: 3
+  retry_delay: 5
+
+# Logging Configuration
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: logs/briefing.log
+
+# Database Configuration
+database:
+  path: data/articles.db
+  cleanup_days: 7
