@@ -4,125 +4,24 @@ on:
   schedule:
     - cron: '0 */2 * * *'
   workflow_dispatch:
-  push:
-    branches: [main]
 
 jobs:
-  send-crypto-news:
+  send-news:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
       
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyyaml requests feedparser python-telegram-bot beautifulsoup4 lxml python-dotenv
+        run: pip install pyyaml requests feedparser beautifulsoup4 lxml
       
-      - name: Create .env file
-        run: |
-          echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" > .env
-          echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
-      
-      - name: Create SSL fetcher
-        run: |
-          cat > modules/rss_ssl.py << 'END'
-import feedparser, ssl, urllib.request, logging
-from datetime import datetime, timedelta
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-ctx = ssl.create_default_context()
-ctx.check_hostname = False
-ctx.verify_mode = ssl.CERT_NONE
-_orig = urllib.request.urlopen
-def _patch(url, *a, **k):
-    try: return _orig(url, *a, **k, context=ctx)
-    except:
-        import urllib.request
-        return urllib.request.urlopen(urllib.request.Request(url), timeout=30)
-urllib.request.urlopen = _patch
-
-class Fetcher:
-    def __init__(self):
-        self.feeds = [
-            {'name': 'CoinTelegraph', 'url': 'https://cointelegraph.com/rss', 'enabled': True, 'priority': 2, 'crypto_only': True},
-            {'name': 'CoinDesk', 'url': 'https://www.coindesk.com/arc/outboundfeeds/rss/', 'enabled': True, 'priority': 2, 'crypto_only': True},
-        ]
-    
-    def fetch_all(self):
-        articles = []
-        for f in self.feeds:
-            if not f['enabled']: continue
-            try:
-                feed = feedparser.parse(f['url'])
-                for e in feed.entries[:30]:
-                    try:
-                        if hasattr(e, 'published_parsed') and e.published_parsed:
-                            d = datetime(*e.published_parsed[:6])
-                            if d < datetime.now() - timedelta(hours=24): continue
-                        articles.append({
-                            'title': e.get('title', '')[:100],
-                            'source': f['name'],
-                            'url': e.link,
-                            'published': d if 'd' in dir() else datetime.now()
-                        })
-                    except: pass
-            except Exception as ex:
-                logger.error(f"Error {f['name']}: {ex}")
-        return articles[:10]
-END
-          mv modules/rss_ssl.py modules/rss_fetcher_ssl.py
-      
-      - name: Create sender
-        run: |
-          cat > sender.py << 'END'
-import os, yaml, logging, sys
-from datetime import datetime
-from modules.rss_fetcher_ssl import Fetcher
-import requests
-
-with open('config.yaml', 'r') as f:
-    config = yaml.safe_load(f)
-
-TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
-CHAT_ID = os.environ['TELEGRAM_CHAT_ID']
-
-print("=" * 70)
-print("🚀 Crypto News Briefing")
-print("=" * 70)
-print()
-
-print("📥 Fetching news...")
-fetcher = Fetcher()
-articles = fetcher.fetch_all()
-print(f"   Found {len(articles)} articles")
-print()
-
-msg = ["📰 *Crypto News Briefing*", f"_{datetime.now().strftime('%Y-%m-%d %H:%M')}_", ""]
-for i, a in enumerate(articles, 1):
-    emoji = "📰" if a['source'] == 'CoinTelegraph' else "📊"
-    msg.append(f"{emoji} *{i}. {a['title']}*")
-    msg.append(f"   📍 {a['source']}")
-    msg.append("")
-msg.extend(["-"*30, "", "🤖 Automated Crypto News Briefing"])
-
-r = requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-    json={"chat_id": CHAT_ID, "text": "\n".join(msg), "parse_mode": "Markdown"})
-if r.status_code == 200:
-    print("✅ Sent to Telegram!")
-else:
-    print(f"❌ Failed: {r.status_code}")
-    sys.exit(1)
-END
-      
-      - name: Send news
-        run: python sender.py
+      - name: Run crypto news sender
+        run: python github_actions_runner.py
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
