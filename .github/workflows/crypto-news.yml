@@ -2,8 +2,7 @@ name: 加密货币新闻简报
 
 on:
   schedule:
-    # 每8小时运行 (UTC时间)
-    # UTC 0, 8, 16 = 北京时间 8:00, 16:00, 次日 0:00
+    # 每8小时运行
     - cron: '0 */8 * * *'
   workflow_dispatch:
 
@@ -22,7 +21,9 @@ jobs:
           python-version: '3.11'
       
       - name: 安装依赖
-        run: pip install pyyaml requests feedparser beautifulsoup4 lxml
+        run: |
+          pip install --upgrade pip
+          pip install pyyaml requests feedparser beautifulsoup4 lxml deep-translator
       
       - name: 运行加密货币新闻简报
         run: python github_actions_runner.py
