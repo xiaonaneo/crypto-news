@@ -1,25 +1,30 @@
-name: Crypto News Briefing
+name: 加密货币新闻简报
 
 on:
   schedule:
-    - cron: '0 */2 * * *'
+    # 每8小时运行 (UTC时间)
+    # UTC 0, 8, 16 = 北京时间 8:00, 16:00, 次日 0:00
+    - cron: '0 */8 * * *'
   workflow_dispatch:
 
 jobs:
-  send-news:
+  send-crypto-news:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
     steps:
-      - uses: actions/checkout@v4
+      - name: 检出代码
+        uses: actions/checkout@v4
       
-      - name: Set up Python
+      - name: 设置Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       
-      - name: Install dependencies
+      - name: 安装依赖
         run: pip install pyyaml requests feedparser beautifulsoup4 lxml
       
-      - name: Run crypto news sender
+      - name: 运行加密货币新闻简报
         run: python github_actions_runner.py
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
