@@ -287,18 +287,62 @@ class RSSFetcher:
                 feed_articles = future.result()
                 articles.extend(feed_articles)
 
-        # 按重要性排序（来源优先级 + 时间衰减）
-        def importance_score(article):
-            priority = article.get("priority", 3)  # 1=高优先级, 3=低优先级
-            # 来源分数：优先级1得1分，优先级3得0分
-            source_score = 1.0 - (priority - 1) / 2.0
+        # 统计多源验证（同一URL被多少源报道）
+        url_pattern_count = {}
+        for article in articles:
+            url_pattern = article.get("url", "")[:50]
+            url_pattern_count[url_pattern] = url_pattern_count.get(url_pattern, 0) + 1
+        for article in articles:
+            url_pattern = article.get("url", "")[:50]
+            article["_source_count"] = url_pattern_count.get(url_pattern, 1)
 
-            # 时间分数：12小时内，越近越高
+        # 按重要性排序（5个维度加权）
+        def importance_score(article):
+            # ========== 维度1: 来源优先级 (25%) ==========
+            priority = article.get("priority", 3)  # 1=高优先级, 3=低优先级
+            # 优先级1得1.0，优先级2得0.67，优先级3得0.33
+            source_score = 1.0 - (priority - 1) * 0.33
+
+            # ========== 维度2: 时间衰减 (25%) ==========
             hours_old = (datetime.now(BJ_TIMEZONE) - article["published"]).total_seconds() / 3600
             time_score = max(0, 1.0 - hours_old / 12.0)
 
-            # 综合分数：来源40% + 时间60%
-            return source_score * 0.4 + time_score * 0.6
+            # ========== 维度3: 突发新闻加成 (20%) ==========
+            # 2小时内新闻 +0.3，1小时内 +0.5
+            if hours_old < 1:
+                breaking_score = 1.0
+            elif hours_old < 2:
+                breaking_score = 0.7
+            else:
+                breaking_score = 0.0
+
+            # ========== 维度4: 关键词重要性 (15%) ==========
+            important_keywords = [
+                "etf", "sec", "cftc", "监管", "批准", "通过",
+                "halving", "减半", "bull", "牛市", "crash", "崩盘",
+                "突破", "历史新高", "blackrock", "fidelity",
+                "现货", "上市", "launch", "index"
+            ]
+            title_lower = article.get("title", "").lower()
+            keyword_count = sum(1 for kw in important_keywords if kw.lower() in title_lower)
+            keyword_score = min(keyword_count * 0.25, 1.0)
+
+            # ========== 维度5: 多源验证 (15%) ==========
+            # 统计相同 URL 模式的文章数量
+            url_pattern = article.get("url", "")[:50]  # URL 前50字符
+            cross_source_score = min(article.get("_source_count", 1) / 3.0, 1.0)
+
+            # ========== 综合分数 ==========
+            # 来源25% + 时间25% + 突发20% + 关键词15% + 多源15% = 100%
+            total_score = (
+                source_score * 0.25 +
+                time_score * 0.25 +
+                breaking_score * 0.20 +
+                keyword_score * 0.15 +
+                cross_source_score * 0.15
+            )
+
+            return total_score
 
         articles.sort(key=importance_score, reverse=True)
 
