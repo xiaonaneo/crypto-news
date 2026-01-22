@@ -176,14 +176,14 @@ class RSSFetcher:
 
                 if feed_data.bozo and not feed_data.entries:
                     logger.warning(f"   ⚠️ XML parse error, trying fallback...")
-                    # Try alternative approach
+                    # Try alternative: fetch raw content and parse
                     try:
                         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
                         with urllib.request.urlopen(req, timeout=30, context=ctx) as resp:
-                            data = resp.read()
-                            feed_data = feedparser.parse(data)
+                            raw_data = resp.read()
+                            feed_data = feedparser.parse(raw_data)
                     except Exception as e2:
-                        logger.error(f"   ✗ Fallback failed: {e2}")
+                        logger.error(f"   ✗ Fallback failed: {str(e2)[:50]}")
                         continue
 
                 count = 0
