@@ -5,11 +5,14 @@ Handles article deduplication, filtering, and ranking
 
 import logging
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Set
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)
+
+# Beijing timezone for display
+BJ_TIMEZONE = timezone(timedelta(hours=8))
 
 
 class NewsProcessor:
@@ -104,7 +107,7 @@ class NewsProcessor:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        cutoff = datetime.now() - timedelta(days=days)
+        cutoff = datetime.now(BJ_TIMEZONE) - timedelta(days=days)
         cursor.execute("DELETE FROM articles WHERE created_at < ?", (cutoff,))
         
         deleted = cursor.rowcount
@@ -116,7 +119,7 @@ class NewsProcessor:
     
     def calculate_recency_score(self, article: Dict) -> float:
         """Calculate recency score (0-1)"""
-        now = datetime.now()
+        now = datetime.now(BJ_TIMEZONE)
         hours_old = (now - article['published']).total_seconds() / 3600
         
         # Exponential decay: very recent = high score
@@ -230,7 +233,7 @@ if __name__ == "__main__":
                 'title': 'Test Article 1',
                 'url': 'https://example.com/1',
                 'summary': 'Test summary 1',
-                'published': datetime.now(),
+                'published': datetime.now(BJ_TIMEZONE),
                 'engagement': 100
             },
             {
@@ -240,7 +243,7 @@ if __name__ == "__main__":
                 'title': 'Test Article 2',
                 'url': 'https://example.com/2',
                 'summary': 'Test summary 2',
-                'published': datetime.now(),
+                'published': datetime.now(BJ_TIMEZONE),
                 'engagement': 500
             }
         ]

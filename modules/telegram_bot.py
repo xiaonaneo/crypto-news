@@ -8,9 +8,12 @@ import logging
 from telegram import Bot
 from telegram.error import TelegramError
 from typing import List, Dict
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
+
+# Beijing timezone for display
+BJ_TIMEZONE = timezone(timedelta(hours=8))
 
 
 class TelegramBriefingBot:
@@ -47,70 +50,53 @@ class TelegramBriefingBot:
         
         return False
     
-    def format_briefing(self, articles: List[Dict]) -> str:
+    def format_briefing(self, articles: List[Dict], prices: Dict = None) -> str:
         """Format articles into a nice briefing"""
         if not articles:
-            return "📰 *Crypto News Briefing*\n\nNo new articles found in this cycle."
+            return "📰 *加密新闻简报*\n\n本周期未找到新文章。"
         
         lines = []
         
-        # Header
-        lines.append("📰 *Crypto News Briefing*")
-        lines.append(f"_{datetime.now().strftime('%Y-%m-%d %H:%M UTC')}_")
+        # Header with prices
+        lines.append("*加密新闻简报*")
+        lines.append(datetime.now(BJ_TIMEZONE).strftime('%Y-%m-%d %H:%M'))
         lines.append("")
-        lines.append(f"📊 Found {len(articles)} crypto articles")
-        lines.append("")
-        lines.append("─" * 30)
+        
+        # Add market prices if available
+        if prices:
+            price_parts = []
+            btc = prices.get('btc', {})
+            if btc.get('price'):
+                change = btc.get('change_24h', 0)
+                change_str = f"{change:+.2f}%" if change else ""
+                price_parts.append(f"*₿ ${btc['price']:,.0f} {change_str}*")
+            
+            dxy = prices.get('dxy', {})
+            if dxy.get('price'):
+                change = dxy.get('change_24h', 0)
+                change_str = f"{change:+.2f}%" if change else ""
+                price_parts.append(f"DXY {dxy['price']:.2f} {change_str}")
+            
+            if price_parts:
+                lines.append(" ".join(price_parts))
+        
         lines.append("")
         
         # Articles
-        for i, article in enumerate(articles[:10], 1):  # Limit to 10
-            # Title with emoji based on source
-            source_emoji = {
-                'Reuters': '🔴',
-                'Bloomberg': '🔵',
-                'Financial Times': '🟠',
-                'Wall Street Journal': '🟣',
-                'CNBC': '🔷',
-                'Twitter': '🐦'
-            }.get(article.get('source', '📰'), '📰')
-            
-            lines.append(f"{source_emoji} *{i}. {article['title']}*")
+        for i, article in enumerate(articles[:10], 1):
+            lines.append(f"*{i} {article.get('title_cn', article.get('title', ''))}*")
+            lines.append(f"{article.get('summary', '')}")
+            url = article.get('url', '')
+            source = article.get('source', '')
+            if url:
+                lines.append(f"[{source}]({url}) | {article['published'].strftime('%H:%M')}")
+            else:
+                lines.append(f"_{source} | {article['published'].strftime('%H:%M')}_")
             lines.append("")
-            
-            # Metadata
-            meta_parts = []
-            if article.get('source'):
-                meta_parts.append(f"📍 {article['source']}")
-            if article.get('published'):
-                meta_parts.append(f"🕐 {article['published'].strftime('%H:%M')}")
-            if article.get('engagement', 0) > 0:
-                meta_parts.append(f"❤️ {article['engagement']}")
-            
-            if meta_parts:
-                lines.append("   " + " • ".join(meta_parts))
-                lines.append("")
-            
-            # Summary
-            if article.get('summary'):
-                lines.append(f"   📝 {article['summary']}")
-                lines.append("")
-            
-            # URL
-            if article.get('url'):
-                lines.append(f"   🔗 [Read more]({article['url']})")
-                lines.append("")
-            
-            lines.append("─" * 30)
-            lines.append("")
-        
-        # Footer
-        lines.append("🤖 *Automated Crypto News Briefing*")
-        lines.append("📡 Sources: Reuters, Bloomberg, FT, WSJ, CNBC + Twitter/X")
         
         return "\n".join(lines)
     
-    async def send_briefing(self, articles: List[Dict]) -> bool:
+    async def send_briefing(self, articles: List[Dict], prices: Dict = None) -> bool:
         """Send formatted briefing to Telegram"""
         if not self.token or not self.chat_id:
             logger.error("Telegram credentials not configured")
@@ -120,7 +106,7 @@ class TelegramBriefingBot:
             bot = Bot(token=self.token)
             
             # Format the briefing
-            briefing = self.format_briefing(articles)
+            briefing = self.format_briefing(articles, prices)
             
             # Check message length
             if len(briefing) > self.max_length:
@@ -164,9 +150,9 @@ class TelegramBriefingBot:
             logger.error(f"✗ Error sending to Telegram: {e}")
             return False
     
-    def send_briefing_sync(self, articles: List[Dict]) -> bool:
+    def send_briefing_sync(self, articles: List[Dict], prices: Dict = None) -> bool:
         """Synchronous wrapper for send_briefing"""
-        return asyncio.run(self.send_briefing(articles))
+        return asyncio.run(self.send_briefing(articles, prices))
 
 
 # Convenience function
@@ -193,7 +179,7 @@ if __name__ == "__main__":
             'title': 'Bitcoin surges past $50,000 as institutional interest grows',
             'url': 'https://example.com/article1',
             'summary': 'Bitcoin rallied above $50,000 for the first time this year...',
-            'published': datetime.now(),
+            'published': datetime.now(BJ_TIMEZONE),
             'engagement': 0
         },
         {
@@ -201,7 +187,7 @@ if __name__ == "__main__":
             'title': 'Ethereum ETF approval odds increase: analysts',
             'url': 'https://example.com/article2',
             'summary': 'Analysts are raising their probability estimates for an Ethereum ETF approval...',
-            'published': datetime.now(),
+            'published': datetime.now(BJ_TIMEZONE),
             'engagement': 0
         }
     ]

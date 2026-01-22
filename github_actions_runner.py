@@ -6,13 +6,14 @@
 """
 
 import os, sys, yaml, logging, ssl, urllib.request, feedparser, requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
-from bs4 import BeautifulSoup
-import concurrent.futures
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
+
+# Beijing timezone for display
+BJ_TIMEZONE = timezone(timedelta(hours=8))
 
 
 # ============== SSL 处理 ==============
@@ -211,10 +212,11 @@ def fetch_single_feed(feed: dict, cutoff_time, crypto_keywords: List[str]) -> Li
         count = 0
         for entry in feed_data.entries[:30]:
             try:
-                pub_date = datetime.now()
+                pub_date = datetime.now(BJ_TIMEZONE)
                 if hasattr(entry, "published_parsed") and entry.published_parsed:
                     try:
-                        pub_date = datetime(*entry.published_parsed[:6])
+                        utc_dt = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+                        pub_date = utc_dt.astimezone(BJ_TIMEZONE)
                     except:
                         pass
                     if pub_date < cutoff_time:
@@ -266,7 +268,7 @@ class RSSFetcher:
 
     def fetch_all(self) -> List[Dict]:
         articles = []
-        cutoff_time = datetime.now() - timedelta(hours=self.lookback_hours)
+        cutoff_time = datetime.now(BJ_TIMEZONE) - timedelta(hours=self.lookback_hours)
         crypto_keywords = self.config.get("crypto_keywords", [])
 
         # 过滤启用的源
@@ -321,7 +323,7 @@ def format_briefing(articles: List[Dict], prices: Dict = None) -> str:
     lines = []
 
     lines.append("*加密新闻简报*")
-    lines.append(datetime.now().strftime('%Y-%m-%d %H:%M'))
+    lines.append(datetime.now(BJ_TIMEZONE).strftime('%Y-%m-%d %H:%M'))
     lines.append("")
 
     if prices and prices.get("price"):

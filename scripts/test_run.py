@@ -15,7 +15,7 @@ sys.path.insert(0, str(project_root))
 import yaml
 import logging
 from datetime import datetime
-from modules.rss_fetcher import RSSFetcher
+from modules.rss_fetcher_ssl import RSSFetcher  # Use SSL version
 from modules.telegram_bot import TelegramBriefingBot
 from modules.news_processor import NewsProcessor
 from modules.summarizer import ArticleSummarizer

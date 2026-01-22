@@ -20,8 +20,9 @@ from modules.rss_fetcher_ssl import RSSFetcher
 from modules.telegram_bot import TelegramBriefingBot
 from modules.news_processor import NewsProcessor
 from modules.summarizer import ArticleSummarizer
+from modules.price_fetcher import PriceFetcher
 from apscheduler.schedulers.blocking import BlockingScheduler
-from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
 
 
 import logging
@@ -41,6 +42,7 @@ class CryptoNewsBriefing:
         self.rss_fetcher = RSSFetcher(self.config)
         self.processor = NewsProcessor(self.config)
         self.summarizer = ArticleSummarizer(self.config)
+        self.price_fetcher = PriceFetcher()
         
         # Telegram bot (optional)
         self.telegram_bot = None
@@ -120,6 +122,13 @@ class CryptoNewsBriefing:
         logger.info("=" * 50)
         
         try:
+            # Step 0: Fetch market prices
+            logger.info("📊 Step 0: Fetching market prices...")
+            prices = self.price_fetcher.fetch_all()
+            price_text = self.price_fetcher.get_price_text()
+            if price_text:
+                logger.info(f"Market prices: {price_text}")
+            
             # Step 1: Fetch RSS news
             logger.info("📥 Step 1: Fetching RSS feeds...")
             articles = self.rss_fetcher.fetch_all()
@@ -144,7 +153,7 @@ class CryptoNewsBriefing:
             # Step 4: Send to Telegram
             if self.telegram_bot:
                 logger.info("📤 Step 4: Sending to Telegram...")
-                success = self.telegram_bot.send_briefing_sync(articles)
+                success = self.telegram_bot.send_briefing_sync(articles, prices)
                 
                 if success:
                     logger.info("✓ Briefing completed successfully!")
@@ -167,18 +176,20 @@ class CryptoNewsBriefing:
     def run_scheduled(self):
         """Run the scheduler"""
         scheduler_config = self.config.get('scheduler', {})
-        interval_hours = scheduler_config.get('interval_hours', 2)
-        timezone = scheduler_config.get('timezone', 'UTC')
-        run_at_start = scheduler_config.get('run_at_start', True)
+        timezone = scheduler_config.get('timezone', 'Asia/Shanghai')
+        run_at_start = scheduler_config.get('run_at_start', False)
         
-        logger.info(f"Starting scheduler: every {interval_hours} hours ({timezone})")
+        # Get cron hour(s) from config
+        cron_hour = scheduler_config.get('cron_hour', '8,20')
+        
+        logger.info(f"Starting scheduler: daily at {cron_hour} ({timezone})")
         
         scheduler = BlockingScheduler(timezone=timezone)
         
-        # Add job
+        # Add job with cron trigger (daily at specified hour(s))
         scheduler.add_job(
             self.run_once,
-            trigger=IntervalTrigger(hours=interval_hours),
+            trigger=CronTrigger(hour=cron_hour, minute=0),
             id='crypto_news_briefing',
             name='Fetch and send crypto news briefing',
             replace_existing=True,

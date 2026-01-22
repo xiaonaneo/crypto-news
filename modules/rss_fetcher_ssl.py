@@ -6,7 +6,7 @@ import feedparser
 import logging
 import ssl
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict
 import hashlib
 import re
@@ -14,6 +14,9 @@ import re
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Beijing timezone for display
+BJ_TIMEZONE = timezone(timedelta(hours=8))
 
 
 # Create SSL context that doesn't verify certificates (for dev environments)
@@ -74,24 +77,35 @@ class RSSFetcher:
         return hashlib.md5(url.encode()).hexdigest()
     
     def parse_date(self, entry) -> datetime:
-        """Parse date from feed entry"""
+        """Parse date from feed entry, converting to Beijing time"""
         try:
             if hasattr(entry, 'published_parsed') and entry.published_parsed:
-                return datetime(*entry.published_parsed[:6])
+                # published_parsed is UTC time (struct_time)
+                utc_dt = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+                # Convert to Beijing time
+                return utc_dt.astimezone(BJ_TIMEZONE)
             elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
-                return datetime(*entry.updated_parsed[:6])
+                utc_dt = datetime(*entry.updated_parsed[:6], tzinfo=timezone.utc)
+                return utc_dt.astimezone(BJ_TIMEZONE)
             elif hasattr(entry, 'dc_date') and entry.dc_date:
-                return datetime.fromisoformat(entry.dc_date.replace('Z', '+00:00'))
+                dt = datetime.fromisoformat(entry.dc_date.replace('Z', '+00:00'))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt.astimezone(BJ_TIMEZONE)
             elif hasattr(entry, 'published') and entry.published:
                 date_str = entry.published
                 for fmt in ['%a, %d %b %Y %H:%M:%S %z', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S']:
                     try:
-                        return datetime.strptime(date_str, fmt)
+                        dt = datetime.strptime(date_str, fmt)
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
+                        return dt.astimezone(BJ_TIMEZONE)
                     except:
                         continue
         except Exception as e:
             logger.debug(f"Failed to parse date: {e}")
-        return datetime.now()
+        # Fallback to current Beijing time
+        return datetime.now(BJ_TIMEZONE)
     
     def clean_text(self, text: str, max_length: int = 200) -> str:
         """Clean and truncate text"""
@@ -119,7 +133,7 @@ class RSSFetcher:
             if feed.bozo:
                 logger.warning(f"Malformed XML in {feed_info['name']}")
             
-            cutoff_time = datetime.now() - timedelta(hours=self.lookback_hours)
+            cutoff_time = datetime.now(BJ_TIMEZONE) - timedelta(hours=self.lookback_hours)
             crypto_only = feed_info.get('crypto_only', False)
             
             for entry in feed.entries[:50]:
@@ -140,10 +154,7 @@ class RSSFetcher:
                     'source_priority': feed_info.get('priority', 1),
                     'title': self.clean_text(title),
                     'url': entry.link,
-                    'summary': self.clean_text(summary, 300),
                     'published': pub_date,
-                    'authors': entry.get('authors', []),
-                    'categories': entry.get('categories', []),
                     'engagement': 0
                 }
                 
