@@ -8,6 +8,8 @@
 import os, sys, yaml, logging, ssl, urllib.request, feedparser, requests
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from bs4 import BeautifulSoup
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
@@ -275,13 +277,13 @@ class RSSFetcher:
         enabled_feeds = [f for f in self.feeds if f.get("enabled", True)]
 
         # 并行抓取 (最多 5 个并发)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        with ThreadPoolExecutor(max_workers=5) as executor:
             futures = {
                 executor.submit(fetch_single_feed, feed, cutoff_time, crypto_keywords): feed
                 for feed in enabled_feeds
             }
 
-            for future in concurrent.futures.as_completed(futures):
+            for future in as_completed(futures):
                 feed_articles = future.result()
                 articles.extend(feed_articles)
 
