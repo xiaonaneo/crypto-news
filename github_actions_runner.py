@@ -378,17 +378,18 @@ class RSSFetcher:
             content_score = min(len(summary) / 200, 1.0) if summary else 0.3
 
             # ========== 综合分数 ==========
+            # 10个维度平均分配，各占10%
             total_score = (
-                source_score * 0.15 +      # 来源权威性
-                time_score * 0.15 +        # 新闻时效性
-                breaking_score * 0.12 +    # 突发性
-                keyword_score * 0.12 +     # 重大事件
-                coin_score * 0.10 +        # 主流币相关性
-                cross_source_score * 0.10 + # 多源验证
-                sentiment_score * 0.08 +   # 情绪倾向
-                social_score * 0.08 +      # 社交热度
-                attract_score * 0.05 +     # 标题吸引力
-                content_score * 0.05       # 内容深度
+                source_score * 0.10 +
+                time_score * 0.10 +
+                breaking_score * 0.10 +
+                keyword_score * 0.10 +
+                coin_score * 0.10 +
+                cross_source_score * 0.10 +
+                sentiment_score * 0.10 +
+                social_score * 0.10 +
+                attract_score * 0.10 +
+                content_score * 0.10
             )
 
             return total_score
