@@ -287,11 +287,23 @@ class RSSFetcher:
                 feed_articles = future.result()
                 articles.extend(feed_articles)
 
-        # 按时间排序
-        articles.sort(key=lambda x: x["published"].timestamp(), reverse=True)
+        # 按重要性排序（来源优先级 + 时间衰减）
+        def importance_score(article):
+            priority = article.get("priority", 3)  # 1=高优先级, 3=低优先级
+            # 来源分数：优先级1得1分，优先级3得0分
+            source_score = 1.0 - (priority - 1) / 2.0
+
+            # 时间分数：12小时内，越近越高
+            hours_old = (datetime.now(BJ_TIMEZONE) - article["published"]).total_seconds() / 3600
+            time_score = max(0, 1.0 - hours_old / 12.0)
+
+            # 综合分数：来源40% + 时间60%
+            return source_score * 0.4 + time_score * 0.6
+
+        articles.sort(key=importance_score, reverse=True)
 
         max_articles = self.config.get("processing", {}).get("max_articles", 10)
-        logger.info(f"📊 Total: {len(articles)} articles (max {max_articles})")
+        logger.info(f"📊 Total: {len(articles)} articles (top {max_articles} by importance)")
         return articles[:max_articles]
 
 
