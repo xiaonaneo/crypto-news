@@ -16,14 +16,25 @@ logger = logging.getLogger(__name__)
 
 # ============== SSL 处理 ==============
 _orig_urlopen = urllib.request.urlopen
+
 def _patched_urlopen(url, *a, **k):
-    if isinstance(url, urllib.request.Request):
-        return _orig_urlopen(url, *a, **k, context=ssl_context)
+    """修复 SSL 和 URL 类型问题"""
     try:
+        if isinstance(url, urllib.request.Request):
+            return _orig_urlopen(url, *a, **k, context=ssl_context)
         return _orig_urlopen(url, *a, **k, context=ssl_context)
     except Exception:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        return _orig_urlopen(req, *a, **k, context=ssl_context)
+        pass
+    
+    # Fallback: 直接使用 requests
+    if isinstance(url, urllib.request.Request):
+        url = url.full_url
+    try:
+        resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=30)
+        return resp.raw
+    except:
+        return _orig_urlopen(url, *a, **k)
+
 urllib.request.urlopen = _patched_urlopen
 
 ssl_context = ssl.create_default_context()
@@ -138,7 +149,7 @@ def summarize_with_deepseek(title: str, summary: str, url: str = "") -> Dict[str
 """
 
         response = requests.post(
-            "https://api.deepek.com/chat/completions" if "api.deepsek.com" in os.environ.get("DEEPSEEK_API_KEY", "") else "https://api.deepseek.com/chat/completions",
+            "https://api.deepseek.com/chat/completions",
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {api_key}"
@@ -196,23 +207,24 @@ class RSSFetcher:
 
             url = feed.get("url", "")
             crypto_only = feed.get("crypto_only", False)
-            zh_name = feed.get("zh_name", feed["name"])
+            name = feed.get("name", "Unknown")
             priority = feed.get("priority", 3)
 
             try:
-                logger.info(f"📡 Fetching: {zh_name}")
+                logger.info(f"📡 Fetching: {name}")
 
                 feed_data = feedparser.parse(url)
 
+                # 如果解析失败或无条目，尝试备用方法
                 if feed_data.bozo and not feed_data.entries:
-                    logger.warning(f"   Malformed XML, trying fallback...")
+                    logger.warning(f"   Malformed XML, trying alternative...")
                     try:
-                        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                        with urllib.request.urlopen(req, timeout=30, context=ssl_context) as resp:
-                            raw_data = resp.read()
-                            feed_data = feedparser.parse(raw_data)
+                        # 使用 requests 获取后解析
+                        resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=30)
+                        if resp.status_code == 200:
+                            feed_data = feedparser.parse(resp.content)
                     except Exception as e2:
-                        logger.error(f"   Fallback failed: {str(e2)[:50]}")
+                        logger.error(f"   Alternative failed: {str(e2)[:50]}")
                         continue
 
                 count = 0
@@ -247,8 +259,7 @@ class RSSFetcher:
                             "title": title,
                             "title_cn": ai_result["title_cn"],
                             "summary": ai_result["summary"],
-                            "source": feed["name"],
-                            "source_zh": zh_name,
+                            "source": name,
                             "url": url,
                             "published": pub_date,
                             "priority": priority
@@ -296,7 +307,7 @@ def fetch_btc_price() -> Dict:
 def format_briefing(articles: List[Dict], prices: Dict = None) -> str:
     """
     格式化简报 - 完全复刻本地 modules/telegram_bot.py 的 format_briefing
-    格式：标题、摘要、来源、时间、链接
+    格式：标题、摘要、来源(英文)、时间、链接
     """
     if not articles:
         return "📰 *加密新闻简报*\n\n本周期未找到新文章。"
@@ -315,11 +326,11 @@ def format_briefing(articles: List[Dict], prices: Dict = None) -> str:
         lines.append(f"*₿ ${prices['price']:,.0f} {change_str}*")
         lines.append("")
 
-    # 文章列表：标题、摘要、来源、时间、链接
+    # 文章列表：标题、摘要、来源(英文)、时间、链接
     for i, article in enumerate(articles, 1):
         title = article.get("title_cn", article.get("title", ""))
         summary = article.get("summary", "")
-        source = article.get("source_zh", article.get("source", ""))
+        source = article.get("source", "Unknown")  # 英文来源
         url = article.get("url", "")
         time_str = article["published"].strftime("%H:%M")
 
@@ -421,7 +432,7 @@ def main():
     print()
     logger.info("📋 Preview:")
     for i, a in enumerate(articles[:5], 1):
-        logger.info(f"   {i}. {a['title_cn'][:40]}...")
+        logger.info(f"   {i}. {a['title_cn'][:40]}... ({a['source']})")
     print()
 
     logger.info("📤 Step 2: Sending to Telegram...")
