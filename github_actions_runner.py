@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-加密货币新闻简报 - 简洁版
-- 翻译成中文
-- 简洁格式
+加密货币新闻简报 - 完整版
+- 完整句子
+- 丰富内容
 - 每8小时推送10条
 """
 
@@ -28,16 +28,52 @@ def _patch(url, *a, **k):
 
 urllib.request.urlopen = _patch
 
-def translate_to_chinese(text: str) -> str:
+def clean_html(text: str) -> str:
     if not text:
         return ""
+    import re
+    text = re.sub(r'<[^>]+>', '', text)
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
+def translate_text(text: str) -> str:
+    if not text:
+        return ""
+    text = clean_html(text)
+    if len(text) < 5:
+        return text
     try:
-        if len(text) > 5000:
-            text = text[:5000]
         result = translator.translate(text)
         return result if result else text
     except:
         return text
+
+def create_content(title: str, summary: str, source: str) -> str:
+    """根据标题生成完整内容"""
+    title_zh = translate_text(title)
+    summary_zh = translate_text(summary)
+    
+    title_zh = clean_html(title_zh)
+    summary_zh = clean_html(summary_zh)
+    
+    # 如果摘要有用，用摘要
+    if len(summary_zh) > len(title_zh) + 20:
+        # 确保句子完整
+        content = summary_zh
+        if len(content) > 150:
+            # 在句号处截断
+            for i in range(140, len(content)):
+                if content[i] in '。！？':
+                    return content[:i+1].strip()
+        return content.strip()
+    
+    # 否则用标题
+    # 标题转陈述句
+    content = title_zh
+    if not content.endswith(('。', '！', '？')):
+        content += '。'
+    
+    return content
 
 class CryptoNewsFetcher:
     def __init__(self, config_path='config.yaml'):
@@ -82,11 +118,12 @@ class CryptoNewsFetcher:
                         if not self.is_crypto_related(title, summary, crypto_only):
                             continue
                         
-                        # 翻译标题
-                        title_zh = translate_to_chinese(title)
+                        title_zh = translate_text(title)
+                        content = create_content(title, summary, feed.get('zh_name', ''))
                         
                         articles.append({
                             'title': title_zh,
+                            'content': content,
                             'source_zh': feed.get('zh_name', feed['name']),
                             'url': entry.link,
                             'published': pub_date
@@ -114,7 +151,6 @@ def send_to_telegram(articles):
         logger.error("未找到Telegram配置！")
         return False
     
-    # 构建简洁消息
     lines = []
     lines.append("加密货币新闻简报")
     lines.append(datetime.now().strftime("%Y-%m-%d %H:%M"))
@@ -122,15 +158,14 @@ def send_to_telegram(articles):
     
     for i, article in enumerate(articles, 1):
         lines.append(f"{i}. {article['title']}")
+        lines.append(f"{article['content']}")
         lines.append(f"来源: {article['source_zh']}")
-        lines.append(f"时间: {article['published'].strftime('%H:%M')}")
         lines.append("")
     
     message = "\n".join(lines)
     
     logger.info("发送到Telegram...")
     
-    # 分段发送
     if len(message) > 4000:
         chunks = [message[i:i+4000] for i in range(0, len(message), 4000)]
         for i, chunk in enumerate(chunks, 1):
@@ -158,7 +193,7 @@ def send_to_telegram(articles):
 
 def main():
     print("=" * 70)
-    print("加密货币新闻简报系统 - 简洁版")
+    print("加密货币新闻简报系统 - 完整版")
     print("=" * 70)
     print()
     
@@ -174,6 +209,7 @@ def main():
     logger.info("新闻预览:")
     for i, a in enumerate(articles[:3], 1):
         logger.info(f"   {i}. {a['title'][:40]}...")
+        logger.info(f"      {a['content'][:60]}...")
     print()
     
     success = send_to_telegram(articles)
