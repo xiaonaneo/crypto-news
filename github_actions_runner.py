@@ -296,50 +296,99 @@ class RSSFetcher:
             url_pattern = article.get("url", "")[:50]
             article["_source_count"] = url_pattern_count.get(url_pattern, 1)
 
-        # 按重要性排序（5个维度加权）
+        # 按重要性排序（10个维度加权）
         def importance_score(article):
-            # ========== 维度1: 来源优先级 (25%) ==========
-            priority = article.get("priority", 3)  # 1=高优先级, 3=低优先级
-            # 优先级1得1.0，优先级2得0.67，优先级3得0.33
+            title = article.get("title", "")
+            title_lower = title.lower()
+
+            # ========== 维度1: 来源优先级 (15%) ==========
+            priority = article.get("priority", 3)
             source_score = 1.0 - (priority - 1) * 0.33
 
-            # ========== 维度2: 时间衰减 (25%) ==========
+            # ========== 维度2: 时间衰减 (15%) ==========
             hours_old = (datetime.now(BJ_TIMEZONE) - article["published"]).total_seconds() / 3600
             time_score = max(0, 1.0 - hours_old / 12.0)
 
-            # ========== 维度3: 突发新闻加成 (20%) ==========
-            # 2小时内新闻 +0.3，1小时内 +0.5
+            # ========== 维度3: 突发新闻加成 (12%) ==========
             if hours_old < 1:
                 breaking_score = 1.0
             elif hours_old < 2:
                 breaking_score = 0.7
+            elif hours_old < 4:
+                breaking_score = 0.4
             else:
                 breaking_score = 0.0
 
-            # ========== 维度4: 关键词重要性 (15%) ==========
-            important_keywords = [
-                "etf", "sec", "cftc", "监管", "批准", "通过",
-                "halving", "减半", "bull", "牛市", "crash", "崩盘",
-                "突破", "历史新高", "blackrock", "fidelity",
-                "现货", "上市", "launch", "index"
+            # ========== 维度4: 重大关键词 (12%) ==========
+            major_keywords = [
+                "etf", "sec", "cftc", "监管", "批准", "通过", "拒绝",
+                "halving", "减半", "bitcoin etf", "现货etf",
+                "blackrock", "fidelity", "grayscale",
+                "历史新高", "突破", "crash", "崩盘", "暴跌",
+                "牛市", "bull", "all-time high", "ATH"
             ]
-            title_lower = article.get("title", "").lower()
-            keyword_count = sum(1 for kw in important_keywords if kw.lower() in title_lower)
-            keyword_score = min(keyword_count * 0.25, 1.0)
+            keyword_count = sum(1 for kw in major_keywords if kw in title_lower)
+            keyword_score = min(keyword_count * 0.2, 1.0)
 
-            # ========== 维度5: 多源验证 (15%) ==========
-            # 统计相同 URL 模式的文章数量
-            url_pattern = article.get("url", "")[:50]  # URL 前50字符
+            # ========== 维度5: 主流币种相关性 (10%) ==========
+            btc_eth_keywords = ["bitcoin", "btc", "eth", "ethereum", "satoshi", "中本聪"]
+            coin_count = sum(1 for kw in btc_eth_keywords if kw in title_lower)
+            coin_score = min(coin_count * 0.3, 1.0)
+
+            # ========== 维度6: 多源验证 (10%) ==========
             cross_source_score = min(article.get("_source_count", 1) / 3.0, 1.0)
 
+            # ========== 维度7: 情绪倾向 (8%) ==========
+            # 检测利好/利空关键词
+            bullish_keywords = ["surge", "rally", "jump", "soar", "gain", "上涨", "飙升", "涨", "利好"]
+            bearish_keywords = ["plunge", "tumble", "drop", "fall", "crash", "崩盘", "暴跌", "跌", "利空", "warning", "concern"]
+
+            bullish_count = sum(1 for kw in bullish_keywords if kw in title_lower)
+            bearish_count = sum(1 for kw in bearish_keywords if kw in title_lower)
+
+            if bullish_count > bearish_count:
+                sentiment_score = 0.8  # 利好新闻稍微加权
+            elif bearish_count > bullish_count:
+                sentiment_score = 0.6  # 利空新闻谨慎对待
+            else:
+                sentiment_score = 0.5
+
+            # ========== 维度8: 社交热度 (8%) ==========
+            # 基于_source_count推断热度（被多源报道说明热度高）
+            social_score = min(article.get("_source_count", 1) / 4.0, 1.0)
+
+            # ========== 维度9: 标题吸引力 (5%) ==========
+            # 感叹号、数字（百分比、价格）增加吸引力
+            has_exclamation = "!" in title
+            has_numbers = any(c.isdigit() for c in title)
+            has_percentage = "%" in title or "percent" in title_lower
+
+            attract_score = 0.3
+            if has_exclamation:
+                attract_score += 0.3
+            if has_numbers:
+                attract_score += 0.2
+            if has_percentage:
+                attract_score += 0.2
+            attract_score = min(attract_score, 1.0)
+
+            # ========== 维度10: 内容深度 (5%) ==========
+            # 基于摘要长度推断内容深度
+            summary = article.get("summary", "")
+            content_score = min(len(summary) / 200, 1.0) if summary else 0.3
+
             # ========== 综合分数 ==========
-            # 来源25% + 时间25% + 突发20% + 关键词15% + 多源15% = 100%
             total_score = (
-                source_score * 0.25 +
-                time_score * 0.25 +
-                breaking_score * 0.20 +
-                keyword_score * 0.15 +
-                cross_source_score * 0.15
+                source_score * 0.15 +      # 来源权威性
+                time_score * 0.15 +        # 新闻时效性
+                breaking_score * 0.12 +    # 突发性
+                keyword_score * 0.12 +     # 重大事件
+                coin_score * 0.10 +        # 主流币相关性
+                cross_source_score * 0.10 + # 多源验证
+                sentiment_score * 0.08 +   # 情绪倾向
+                social_score * 0.08 +      # 社交热度
+                attract_score * 0.05 +     # 标题吸引力
+                content_score * 0.05       # 内容深度
             )
 
             return total_score
