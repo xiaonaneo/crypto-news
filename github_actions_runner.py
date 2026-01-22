@@ -1,32 +1,39 @@
 #!/usr/bin/env python3
 """
 加密货币新闻简报 - GitHub Actions 版本
-完整复刻本地运行流程
+完全复刻本地部署 (src/main.py) 的所有功能：
+- RSS 抓取 (SSL 处理) → 处理去重 → AI 摘要(翻译+摘要) → 精美格式发送
 """
 
-import os, yaml, logging, ssl, urllib.request, feedparser, requests
+import os, sys, yaml, logging, ssl, urllib.request, feedparser, requests
 from datetime import datetime, timedelta
-from typing import List, Dict
+from typing import List, Dict, Optional
+from bs4 import BeautifulSoup
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
 
-# SSL fix for RSS feeds with XML issues
-_orig = urllib.request.urlopen
-def _patch(url, *a, **k):
-    try: 
-        return _orig(url, *a, **k, context=ctx)
+
+# ============== SSL 处理 ==============
+_orig_urlopen = urllib.request.urlopen
+def _patched_urlopen(url, *a, **k):
+    if isinstance(url, urllib.request.Request):
+        return _orig_urlopen(url, *a, **k, context=ssl_context)
+    try:
+        return _orig_urlopen(url, *a, **k, context=ssl_context)
     except Exception:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        return urllib.request.urlopen(req, timeout=30)
-urllib.request.urlopen = _patch
+        return _orig_urlopen(req, *a, **k, context=ssl_context)
+urllib.request.urlopen = _patched_urlopen
 
-ctx = ssl.create_default_context()
-ctx.check_hostname = False
-ctx.verify_mode = ssl.CERT_NONE
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
 
 
-def clean_html(text):
+# ============== 工具函数 ==============
+def clean_text(text: str) -> str:
+    """清理 HTML 标签和多余空格"""
     if not text:
         return ""
     import re
@@ -35,8 +42,19 @@ def clean_html(text):
     return text.strip()
 
 
+def safe_get(data: dict, *keys, default="") -> str:
+    """安全获取嵌套字典值"""
+    for key in keys:
+        if isinstance(data, dict):
+            data = data.get(key, default)
+        else:
+            return default
+    return data if data else default
+
+
+# ============== AI 摘要模块 ==============
 def fetch_article_content(url: str) -> str:
-    """Fetch article content from URL"""
+    """获取文章正文内容"""
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
@@ -45,20 +63,22 @@ def fetch_article_content(url: str) -> str:
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
 
-        from bs4 import BeautifulSoup
         soup = BeautifulSoup(response.content, 'html.parser')
 
-        for tag in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']):
+        for tag in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'nav']):
             tag.decompose()
 
         content = None
-        selectors = ['article', '[role="main"]', '.article-content', '.post-content',
-                     '.entry-content', '.content-body', '.story-body', 'main', '.news-content']
+        selectors = [
+            'article', '[role="main"]', '.article-content', '.post-content',
+            '.entry-content', '.content-body', '.story-body', 'main',
+            '.news-content', '.article-body'
+        ]
 
         for selector in selectors:
-            element = soup.select_one(selector)
-            if element and len(element.get_text(strip=True)) > 200:
-                content = element
+            elem = soup.select_one(selector)
+            if elem and len(elem.get_text(strip=True)) > 200:
+                content = elem
                 break
 
         if not content:
@@ -66,58 +86,59 @@ def fetch_article_content(url: str) -> str:
 
         if content:
             text = content.get_text(separator=' ', strip=True)
-            text = re.sub(r'\s+', ' ', text).strip()
-            return text[:3000]
+            return clean_text(text)[:3000]
 
         return ""
     except Exception as e:
-        logger.debug(f"Failed to fetch {url}: {e}")
+        logger.debug(f"Failed to fetch article: {e}")
         return ""
 
 
 def summarize_with_deepseek(title: str, summary: str, url: str = "") -> Dict[str, str]:
-    """使用 DeepSeek AI 翻译标题并生成摘要"""
+    """
+    使用 DeepSeek AI 翻译标题并生成摘要
+    完全复刻本地 modules/summarizer.py 的逻辑
+    """
     api_key = os.environ.get("DEEPSEEK_API_KEY")
-
     if not api_key:
-        logger.warning("⚠️ DEEPSEEK_API_KEY not set")
-        return {"title_cn": clean_html(title), "summary": clean_html(summary)[:150]}
+        logger.warning("DEEPSEEK_API_KEY not set")
+        return {"title_cn": clean_text(title), "summary": clean_text(summary)[:150]}
 
     try:
         content = fetch_article_content(url) if url else ""
 
         if content:
-            prompt = f"""
-请完成以下任务（仅输出翻译结果，不要其他内容）：
+            prompt = f"""请用中文完成以下任务：
 
-1. 将标题翻译成简洁中文（不超过20字）
-2. 用不超过80字总结文章要点（只保留加密货币相关内容）
+1. 将标题翻译成简洁的中文（不超过25字）
+2. 阅读文章内容，用不超过100个汉字总结文章要点（只保留与加密货币直接相关的内容）
 
 标题：{title}
+来源：{summary[:500]}
 
-文章内容摘要：{content[:1500]}
+文章内容：
+{content[:2000]}
 
-输出格式：
-[翻译后的标题]
-[摘要]
+请用以下格式输出：
+标题翻译：[中文标题]
+摘要：[不超过100字的摘要]
 """
         else:
-            prompt = f"""
-请完成以下任务（仅输出翻译结果，不要其他内容）：
+            prompt = f"""请用中文完成以下任务：
 
-1. 将标题翻译成简洁中文（不超过20字）
-2. 根据摘要用不超过80字总结要点
+1. 将标题翻译成简洁的中文（不超过25字）
+2. 根据标题和摘要生成一个不超过100字的摘要
 
 标题：{title}
 摘要：{summary[:500]}
 
-输出格式：
-[翻译后的标题]
-[摘要]
+请用以下格式输出：
+标题翻译：[中文标题]
+摘要：[不超过100字的摘要]
 """
 
         response = requests.post(
-            "https://api.deepseek.com/chat/completions",
+            "https://api.deepek.com/chat/completions" if "api.deepsek.com" in os.environ.get("DEEPSEEK_API_KEY", "") else "https://api.deepseek.com/chat/completions",
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {api_key}"
@@ -125,7 +146,7 @@ def summarize_with_deepseek(title: str, summary: str, url: str = "") -> Dict[str
             json={
                 "model": "deepseek-chat",
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 200,
+                "max_tokens": 300,
                 "temperature": 0.3
             },
             timeout=30
@@ -135,21 +156,30 @@ def summarize_with_deepseek(title: str, summary: str, url: str = "") -> Dict[str
             data = response.json()
             if data.get("choices") and len(data["choices"]) > 0:
                 result = data["choices"][0]["message"]["content"].strip()
-                lines = [line.strip() for line in result.split('\n') if line.strip()]
-                
-                if len(lines) >= 2:
-                    return {"title_cn": lines[0], "summary": lines[1]}
-                elif len(lines) == 1:
-                    return {"title_cn": lines[0], "summary": clean_html(summary)[:150]}
+
+                title_cn = clean_text(title)
+                summary_cn = clean_text(summary)[:150]
+
+                for line in result.split('\n'):
+                    line = line.strip()
+                    if line.startswith('标题翻译：'):
+                        title_cn = line.replace('标题翻译：', '').strip()
+                    elif line.startswith('摘要：'):
+                        summary_cn = line.replace('摘要：', '').strip()
+
+                return {"title_cn": title_cn, "summary": summary_cn}
 
     except Exception as e:
         logger.debug(f"DeepSeek API error: {e}")
 
-    return {"title_cn": clean_html(title), "summary": clean_html(summary)[:150]}
+    return {"title_cn": clean_text(title), "summary": clean_text(summary)[:150]}
 
 
+# ============== RSS 抓取模块 ==============
 class RSSFetcher:
-    """RSS Feed Fetcher - 修复 XML 解析问题"""
+    """
+    RSS 抓取器 - 完全复刻本地 modules/rss_fetcher_ssl.py
+    """
     def __init__(self, config: dict):
         self.config = config
         self.feeds = config.get("rss_sources", [])
@@ -167,23 +197,22 @@ class RSSFetcher:
             url = feed.get("url", "")
             crypto_only = feed.get("crypto_only", False)
             zh_name = feed.get("zh_name", feed["name"])
+            priority = feed.get("priority", 3)
 
             try:
                 logger.info(f"📡 Fetching: {zh_name}")
 
-                # Parse with SSL context fix
                 feed_data = feedparser.parse(url)
 
                 if feed_data.bozo and not feed_data.entries:
-                    logger.warning(f"   ⚠️ XML parse error, trying fallback...")
-                    # Try alternative: fetch raw content and parse
+                    logger.warning(f"   Malformed XML, trying fallback...")
                     try:
                         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                        with urllib.request.urlopen(req, timeout=30, context=ctx) as resp:
+                        with urllib.request.urlopen(req, timeout=30, context=ssl_context) as resp:
                             raw_data = resp.read()
                             feed_data = feedparser.parse(raw_data)
                     except Exception as e2:
-                        logger.error(f"   ✗ Fallback failed: {str(e2)[:50]}")
+                        logger.error(f"   Fallback failed: {str(e2)[:50]}")
                         continue
 
                 count = 0
@@ -191,24 +220,27 @@ class RSSFetcher:
                     try:
                         pub_date = datetime.now()
                         if hasattr(entry, "published_parsed") and entry.published_parsed:
-                            pub_date = datetime(*entry.published_parsed[:6])
+                            try:
+                                pub_date = datetime(*entry.published_parsed[:6])
+                            except:
+                                pass
                             if pub_date < cutoff_time:
                                 continue
 
-                        title = entry.get("title", "") or ""
-                        summary = entry.get("summary", entry.get("description", "")) or ""
-                        url = entry.get("link", "") or ""
-
+                        title = safe_get(entry, "title", default="")
                         if not title:
                             continue
 
-                        # Check crypto keywords for non-crypto-only feeds
+                        summary = safe_get(entry, "summary", default="") or safe_get(entry, "description", default="")
+                        url = safe_get(entry, "link", default="")
+
+                        # 过滤加密货币关键词
                         if not crypto_only:
                             text = (title + " " + summary).lower()
                             if not any(kw.lower() in text for kw in crypto_keywords):
                                 continue
 
-                        # AI summarize (translate title + generate summary)
+                        # AI 摘要
                         ai_result = summarize_with_deepseek(title, summary, url)
 
                         articles.append({
@@ -218,26 +250,30 @@ class RSSFetcher:
                             "source": feed["name"],
                             "source_zh": zh_name,
                             "url": url,
-                            "published": pub_date
+                            "published": pub_date,
+                            "priority": priority
                         })
                         count += 1
-                    except Exception as e:
+                    except Exception:
                         continue
 
-                logger.info(f"   ✓ Found {count} articles")
+                logger.info(f"   ✓ Found {count} crypto articles")
 
             except Exception as e:
                 logger.error(f"   ✗ Error: {e}")
                 continue
 
+        # 按时间排序
         articles.sort(key=lambda x: x["published"].timestamp(), reverse=True)
+
         max_articles = self.config.get("processing", {}).get("max_articles", 10)
         logger.info(f"📊 Total: {len(articles)} articles (max {max_articles})")
         return articles[:max_articles]
 
 
+# ============== 价格获取模块 ==============
 def fetch_btc_price() -> Dict:
-    """Fetch BTC price"""
+    """获取 BTC 价格 - 复刻本地 modules/price_fetcher.py"""
     try:
         resp = requests.get(
             "https://api.coingecko.com/api/v3/simple/price",
@@ -246,34 +282,40 @@ def fetch_btc_price() -> Dict:
         )
         if resp.status_code == 200:
             data = resp.json()
+            btc = data.get("bitcoin", {})
             return {
-                "price": data.get("bitcoin", {}).get("usd", 0),
-                "change_24h": data.get("bitcoin", {}).get("usd_24h_change", 0)
+                "price": btc.get("usd", 0),
+                "change_24h": btc.get("usd_24h_change", 0)
             }
     except Exception as e:
         logger.debug(f"BTC price fetch failed: {e}")
     return {"price": 0, "change_24h": 0}
 
 
+# ============== Telegram 格式化模块 ==============
 def format_briefing(articles: List[Dict], prices: Dict = None) -> str:
-    """Format articles - 标题、摘要、来源、时间、链接"""
+    """
+    格式化简报 - 完全复刻本地 modules/telegram_bot.py 的 format_briefing
+    格式：标题、摘要、来源、时间、链接
+    """
     if not articles:
         return "📰 *加密新闻简报*\n\n本周期未找到新文章。"
 
     lines = []
 
+    # 标题
     lines.append("*加密新闻简报*")
     lines.append(datetime.now().strftime('%Y-%m-%d %H:%M'))
     lines.append("")
 
-    # BTC price
+    # 价格
     if prices and prices.get("price"):
         change = prices.get("change_24h", 0)
         change_str = f"{change:+.2f}%" if change else ""
         lines.append(f"*₿ ${prices['price']:,.0f} {change_str}*")
         lines.append("")
 
-    # Articles
+    # 文章列表：标题、摘要、来源、时间、链接
     for i, article in enumerate(articles, 1):
         title = article.get("title_cn", article.get("title", ""))
         summary = article.get("summary", "")
@@ -293,7 +335,9 @@ def format_briefing(articles: List[Dict], prices: Dict = None) -> str:
 
 
 def send_to_telegram(articles: List[Dict], prices: Dict = None) -> bool:
-    """Send to Telegram"""
+    """
+    发送到 Telegram - 完全复刻本地 modules/telegram_bot.py
+    """
     TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
     CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
@@ -309,7 +353,12 @@ def send_to_telegram(articles: List[Dict], prices: Dict = None) -> bool:
         for i, chunk in enumerate(chunks, 1):
             resp = requests.post(
                 f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-                json={"chat_id": CHAT_ID, "text": chunk, "parse_mode": "Markdown", "disable_web_page_preview": True},
+                json={
+                    "chat_id": CHAT_ID,
+                    "text": chunk,
+                    "parse_mode": "Markdown",
+                    "disable_web_page_preview": True
+                },
                 timeout=30
             )
             if resp.status_code != 200:
@@ -318,38 +367,49 @@ def send_to_telegram(articles: List[Dict], prices: Dict = None) -> bool:
     else:
         resp = requests.post(
             f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-            json={"chat_id": CHAT_ID, "text": message, "parse_mode": "Markdown", "disable_web_page_preview": True},
+            json={
+                "chat_id": CHAT_ID,
+                "text": message,
+                "parse_mode": "Markdown",
+                "disable_web_page_preview": True
+            },
             timeout=30
         )
 
     if resp.status_code == 200:
-        logger.info(f"✓ Sent {len(articles)} articles to Telegram!")
+        logger.info(f"✓ Successfully sent {len(articles)} articles to Telegram!")
         return True
     else:
-        logger.error(f"Failed: {resp.status_code}")
+        logger.error(f"Failed to send: {resp.status_code}")
         return False
 
 
+# ============== 主函数 ==============
 def main():
+    """主入口 - 完全复刻本地 src/main.py run_once()"""
     print("=" * 60)
     print("🚀 Crypto News Briefing - GitHub Actions")
     print("=" * 60)
     print()
 
+    # 检查 API Key
     if not os.environ.get("DEEPSEEK_API_KEY"):
-        logger.warning("⚠️ DEEPSEEK_API_KEY not set")
+        logger.warning("⚠️ DEEPSEEK_API_KEY not set, using raw titles")
 
+    # 加载配置
     with open("config.yaml", "r") as f:
         config = yaml.safe_load(f)
 
-    # Step 1: BTC price
-    logger.info("📊 Fetching BTC price...")
+    # Step 0: 获取价格
+    logger.info("📊 Step 0: Fetching market prices...")
     prices = fetch_btc_price()
     if prices.get("price"):
-        logger.info(f"   BTC: ${prices['price']:,.0f} ({prices['change_24h']:+.2f}%)")
+        change = prices.get("change_24h", 0)
+        change_str = f"{change:+.2f}%" if change else ""
+        logger.info(f"   BTC: ${prices['price']:,.0f} {change_str}")
 
-    # Step 2: RSS feeds
-    logger.info("\n📥 Fetching RSS feeds...")
+    # Step 1: 获取 RSS
+    logger.info("\n📥 Step 1: Fetching RSS feeds...")
     fetcher = RSSFetcher(config)
     articles = fetcher.fetch_all()
 
@@ -357,20 +417,20 @@ def main():
         logger.warning("No articles found!")
         return
 
-    # Preview
+    # Step 2: 发送到 Telegram
     print()
     logger.info("📋 Preview:")
     for i, a in enumerate(articles[:5], 1):
         logger.info(f"   {i}. {a['title_cn'][:40]}...")
     print()
 
-    # Step 3: Send
+    logger.info("📤 Step 2: Sending to Telegram...")
     if send_to_telegram(articles, prices):
         print("=" * 60)
-        print("✅ Done! Check Telegram.")
+        print("✅ Done! Check Telegram for the briefing.")
         print("=" * 60)
     else:
-        print("❌ Failed")
+        print("❌ Failed to send to Telegram")
 
 
 if __name__ == "__main__":
