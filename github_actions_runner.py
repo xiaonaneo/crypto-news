@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 """
-加密货币新闻简报 - 纯中文版
+加密货币新闻简报 - 翻译版
+- 英文翻译成中文
+- 3句话概括一条新闻
 - 全部中文显示
-- 去掉所有图标
-- 去掉分割线
 - 每8小时推送10条
 """
 
 import os, yaml, logging, ssl, urllib.request, feedparser, requests
 from datetime import datetime, timedelta
+from deep_translator import GoogleTranslator
 
 # 日志配置
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
+
+# 初始化翻译器
+translator = GoogleTranslator(source='auto', target='zh-CN')
 
 # SSL修复
 ctx = ssl.create_default_context()
@@ -27,6 +31,67 @@ def _patch(url, *a, **k):
         return urllib.request.urlopen(req, timeout=30)
 
 urllib.request.urlopen = _patch
+
+def translate_to_chinese(text: str) -> str:
+    """翻译成中文"""
+    if not text:
+        return ""
+    try:
+        # 分段翻译（避免过长）
+        if len(text) > 5000:
+            text = text[:5000]
+        result = translator.translate(text)
+        return result if result else text
+    except Exception as e:
+        logger.debug(f"翻译错误: {e}")
+        return text
+
+def summarize_into_3_sentences(title: str, summary: str) -> str:
+    """用3句话概括新闻"""
+    # 合并标题和摘要
+    full_text = f"{title} {summary}".strip()
+    
+    # 翻译成中文
+    chinese_text = translate_to_chinese(full_text)
+    
+    # 清理
+    import re
+    chinese_text = re.sub(r'<[^>]+>', '', chinese_text)
+    chinese_text = ' '.join(chinese_text.split())
+    
+    # 分割成句子（基于常见标点）
+    sentences = []
+    # 尝试按句号、问号、感叹号分割
+    import re
+    parts = re.split(r'([。！？])', chinese_text)
+    
+    # 重新组合成句子
+    temp = []
+    for i, part in enumerate(parts):
+        if part in '。！？':
+            temp.append(part)
+        else:
+            if temp and part.strip():
+                temp[-1] = temp[-1] + part.strip()
+            elif part.strip():
+                temp.append(part.strip())
+    
+    sentences = [s.strip() + '。' if s and s[-1] not in '。！？' else s.strip() for s in temp if s.strip()]
+    
+    # 如果句子太少，尝试其他分割方式
+    if len(sentences) < 2:
+        # 按逗号分割
+        parts = chinese_text.split('，')
+        sentences = [p.strip() + '，' if i < len(parts) - 1 else p.strip() + '。' for i, p in enumerate(parts) if p.strip()]
+    
+    # 只保留前3句
+    summary_3 = ''.join(sentences[:3])
+    
+    # 确保以句号结尾
+    if summary_3 and summary_3[-1] not in '。！？':
+        summary_3 += '。'
+    
+    return summary_3 if summary_3 else chinese_text[:100] + '...'
 
 class CryptoNewsFetcher:
     def __init__(self, config_path='config.yaml'):
@@ -49,8 +114,6 @@ class CryptoNewsFetcher:
         import re
         text = re.sub(r'<[^>]+>', '', text)
         text = ' '.join(text.split())
-        if len(text) > max_length:
-            text = text[:max_length] + "..."
         return text.strip()
     
     def fetch_all(self):
@@ -81,10 +144,12 @@ class CryptoNewsFetcher:
                         if not self.is_crypto_related(title, summary, crypto_only):
                             continue
                         
+                        # 生成3句概括
+                        summary_3 = summarize_into_3_sentences(title, summary)
+                        
                         articles.append({
-                            'title': self.clean_text(title, 150),
-                            'summary': self.clean_text(summary, 500),
-                            'source': feed['name'],
+                            'title_zh': translate_to_chinese(title),
+                            'summary_3': summary_3,
                             'source_zh': feed.get('zh_name', feed['name']),
                             'url': entry.link,
                             'published': pub_date
@@ -104,25 +169,6 @@ class CryptoNewsFetcher:
         logger.info(f"总计获取 {len(articles)} 篇加密货币新闻")
         return articles[:10]
 
-def generate_summary(title: str, summary: str) -> tuple:
-    """生成中文摘要和详情"""
-    title_clean = title.strip()
-    summary_clean = summary.strip()
-    
-    # 摘要（50字）
-    if len(summary_clean) > 50:
-        brief = summary_clean[:50] + "..."
-    else:
-        brief = summary_clean
-    
-    # 详情（200字）
-    if len(summary_clean) > 200:
-        detail = summary_clean[:200] + "..."
-    else:
-        detail = summary_clean
-    
-    return brief, detail
-
 def send_to_telegram(articles):
     TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
     CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
@@ -140,17 +186,13 @@ def send_to_telegram(articles):
     lines.append("")
     
     for i, article in enumerate(articles, 1):
-        brief, detail = generate_summary(article['title'], article.get('summary', ''))
-        
         # 新闻条目
-        lines.append(f"{i}. {article['title']}")
+        lines.append(f"{i}. {article['title_zh']}")
         lines.append("")
         lines.append(f"来源: {article['source_zh']}")
         lines.append(f"时间: {article['published'].strftime('%H:%M')}")
         lines.append("")
-        lines.append(f"摘要: {brief}")
-        lines.append("")
-        lines.append(f"详情: {detail}")
+        lines.append(f"{article['summary_3']}")
         lines.append("")
     
     # 底部信息
@@ -205,11 +247,11 @@ def send_to_telegram(articles):
 
 def main():
     print("=" * 70)
-    print("加密货币新闻简报系统 - 纯中文版")
+    print("加密货币新闻简报系统 - 翻译版")
     print("=" * 70)
     print()
     
-    logger.info("正在抓取最新加密货币新闻...")
+    logger.info("正在抓取并翻译最新加密货币新闻...")
     fetcher = CryptoNewsFetcher()
     articles = fetcher.fetch_all()
     print()
@@ -218,9 +260,10 @@ def main():
         logger.warning("未找到相关新闻")
         return
     
-    logger.info("新闻预览:")
-    for i, a in enumerate(articles[:3], 1):
-        logger.info(f"   {i}. {a['title'][:50]}...")
+    logger.info("新闻预览（前2条）:")
+    for i, a in enumerate(articles[:2], 1):
+        logger.info(f"   {i}. {a['title_zh'][:40]}...")
+        logger.info(f"      {a['summary_3'][:50]}...")
     print()
     
     success = send_to_telegram(articles)
