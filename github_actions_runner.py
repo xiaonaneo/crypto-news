@@ -9,6 +9,7 @@ import os, sys, yaml, logging, ssl, urllib.request, feedparser, requests
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from bs4 import BeautifulSoup
+import concurrent.futures
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
@@ -106,13 +107,9 @@ def fetch_article_content(url: str) -> str:
 
 
 def summarize_with_deepseek(title: str, summary: str, url: str = "") -> Dict[str, str]:
-    """
-    使用 DeepSeek AI 翻译标题并生成摘要
-    完全复刻本地 modules/summarizer.py 的逻辑
-    """
+    """使用 DeepSeek AI 翻译标题并生成摘要"""
     api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
-        logger.warning("DEEPSEEK_API_KEY not set")
         return {"title_cn": clean_text(title), "summary": clean_text(summary)[:150]}
 
     try:
@@ -187,10 +184,81 @@ def summarize_with_deepseek(title: str, summary: str, url: str = "") -> Dict[str
 
 
 # ============== RSS 抓取模块 ==============
+def fetch_single_feed(feed: dict, cutoff_time, crypto_keywords: List[str]) -> List[Dict]:
+    """单线程抓取单个 RSS 源"""
+    url = feed.get("url", "")
+    name = feed.get("name", "Unknown")
+    crypto_only = feed.get("crypto_only", False)
+    priority = feed.get("priority", 3)
+    articles = []
+
+    try:
+        logger.info(f"📡 Fetching: {name}")
+
+        # 使用 requests 获取内容
+        resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
+
+        if resp.status_code != 200:
+            logger.warning(f"   ✗ HTTP {resp.status_code}")
+            return []
+
+        feed_data = feedparser.parse(resp.content)
+
+        if not feed_data.entries:
+            logger.warning(f"   ✗ No entries")
+            return []
+
+        count = 0
+        for entry in feed_data.entries[:30]:
+            try:
+                pub_date = datetime.now()
+                if hasattr(entry, "published_parsed") and entry.published_parsed:
+                    try:
+                        pub_date = datetime(*entry.published_parsed[:6])
+                    except:
+                        pass
+                    if pub_date < cutoff_time:
+                        continue
+
+                title = safe_get(entry, "title", default="")
+                if not title:
+                    continue
+
+                summary = safe_get(entry, "summary", default="") or safe_get(entry, "description", default="")
+                url = safe_get(entry, "link", default="")
+
+                # 过滤加密货币关键词
+                if not crypto_only:
+                    text = (title + " " + summary).lower()
+                    if not any(kw.lower() in text for kw in crypto_keywords):
+                        continue
+
+                # AI 摘要
+                ai_result = summarize_with_deepseek(title, summary, url)
+
+                articles.append({
+                    "title": title,
+                    "title_cn": ai_result["title_cn"],
+                    "summary": ai_result["summary"],
+                    "source": name,
+                    "url": url,
+                    "published": pub_date,
+                    "priority": priority
+                })
+                count += 1
+            except Exception:
+                continue
+
+        logger.info(f"   ✓ Found {count} crypto articles")
+        return articles
+
+    except Exception as e:
+        logger.error(f"   ✗ Error: {str(e)[:50]}")
+        return []
+
+
 class RSSFetcher:
-    """
-    RSS 抓取器 - 完全复刻本地 modules/rss_fetcher_ssl.py
-    """
+    """RSS 抓取器 - 优化版，支持并行抓取"""
     def __init__(self, config: dict):
         self.config = config
         self.feeds = config.get("rss_sources", [])
@@ -201,78 +269,19 @@ class RSSFetcher:
         cutoff_time = datetime.now() - timedelta(hours=self.lookback_hours)
         crypto_keywords = self.config.get("crypto_keywords", [])
 
-        for feed in self.feeds:
-            if not feed.get("enabled", True):
-                continue
+        # 过滤启用的源
+        enabled_feeds = [f for f in self.feeds if f.get("enabled", True)]
 
-            url = feed.get("url", "")
-            crypto_only = feed.get("crypto_only", False)
-            name = feed.get("name", "Unknown")
-            priority = feed.get("priority", 3)
+        # 并行抓取 (最多 5 个并发)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {
+                executor.submit(fetch_single_feed, feed, cutoff_time, crypto_keywords): feed
+                for feed in enabled_feeds
+            }
 
-            try:
-                logger.info(f"📡 Fetching: {name}")
-
-                feed_data = feedparser.parse(url)
-
-                # 如果解析失败或无条目，尝试备用方法
-                if feed_data.bozo and not feed_data.entries:
-                    logger.warning(f"   Malformed XML, trying alternative...")
-                    try:
-                        # 使用 requests 获取后解析
-                        resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=30)
-                        if resp.status_code == 200:
-                            feed_data = feedparser.parse(resp.content)
-                    except Exception as e2:
-                        logger.error(f"   Alternative failed: {str(e2)[:50]}")
-                        continue
-
-                count = 0
-                for entry in feed_data.entries[:30]:
-                    try:
-                        pub_date = datetime.now()
-                        if hasattr(entry, "published_parsed") and entry.published_parsed:
-                            try:
-                                pub_date = datetime(*entry.published_parsed[:6])
-                            except:
-                                pass
-                            if pub_date < cutoff_time:
-                                continue
-
-                        title = safe_get(entry, "title", default="")
-                        if not title:
-                            continue
-
-                        summary = safe_get(entry, "summary", default="") or safe_get(entry, "description", default="")
-                        url = safe_get(entry, "link", default="")
-
-                        # 过滤加密货币关键词
-                        if not crypto_only:
-                            text = (title + " " + summary).lower()
-                            if not any(kw.lower() in text for kw in crypto_keywords):
-                                continue
-
-                        # AI 摘要
-                        ai_result = summarize_with_deepseek(title, summary, url)
-
-                        articles.append({
-                            "title": title,
-                            "title_cn": ai_result["title_cn"],
-                            "summary": ai_result["summary"],
-                            "source": name,
-                            "url": url,
-                            "published": pub_date,
-                            "priority": priority
-                        })
-                        count += 1
-                    except Exception:
-                        continue
-
-                logger.info(f"   ✓ Found {count} crypto articles")
-
-            except Exception as e:
-                logger.error(f"   ✗ Error: {e}")
-                continue
+            for future in concurrent.futures.as_completed(futures):
+                feed_articles = future.result()
+                articles.extend(feed_articles)
 
         # 按时间排序
         articles.sort(key=lambda x: x["published"].timestamp(), reverse=True)
@@ -284,7 +293,7 @@ class RSSFetcher:
 
 # ============== 价格获取模块 ==============
 def fetch_btc_price() -> Dict:
-    """获取 BTC 价格 - 复刻本地 modules/price_fetcher.py"""
+    """获取 BTC 价格"""
     try:
         resp = requests.get(
             "https://api.coingecko.com/api/v3/simple/price",
@@ -305,32 +314,26 @@ def fetch_btc_price() -> Dict:
 
 # ============== Telegram 格式化模块 ==============
 def format_briefing(articles: List[Dict], prices: Dict = None) -> str:
-    """
-    格式化简报 - 完全复刻本地 modules/telegram_bot.py 的 format_briefing
-    格式：标题、摘要、来源(英文)、时间、链接
-    """
+    """格式化简报"""
     if not articles:
         return "📰 *加密新闻简报*\n\n本周期未找到新文章。"
 
     lines = []
 
-    # 标题
     lines.append("*加密新闻简报*")
     lines.append(datetime.now().strftime('%Y-%m-%d %H:%M'))
     lines.append("")
 
-    # 价格
     if prices and prices.get("price"):
         change = prices.get("change_24h", 0)
         change_str = f"{change:+.2f}%" if change else ""
         lines.append(f"*₿ ${prices['price']:,.0f} {change_str}*")
         lines.append("")
 
-    # 文章列表：标题、摘要、来源(英文)、时间、链接
     for i, article in enumerate(articles, 1):
         title = article.get("title_cn", article.get("title", ""))
         summary = article.get("summary", "")
-        source = article.get("source", "Unknown")  # 英文来源
+        source = article.get("source", "Unknown")
         url = article.get("url", "")
         time_str = article["published"].strftime("%H:%M")
 
@@ -346,9 +349,7 @@ def format_briefing(articles: List[Dict], prices: Dict = None) -> str:
 
 
 def send_to_telegram(articles: List[Dict], prices: Dict = None) -> bool:
-    """
-    发送到 Telegram - 完全复刻本地 modules/telegram_bot.py
-    """
+    """发送到 Telegram"""
     TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
     CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
@@ -397,21 +398,18 @@ def send_to_telegram(articles: List[Dict], prices: Dict = None) -> bool:
 
 # ============== 主函数 ==============
 def main():
-    """主入口 - 完全复刻本地 src/main.py run_once()"""
+    """主入口"""
     print("=" * 60)
     print("🚀 Crypto News Briefing - GitHub Actions")
     print("=" * 60)
     print()
 
-    # 检查 API Key
     if not os.environ.get("DEEPSEEK_API_KEY"):
-        logger.warning("⚠️ DEEPSEEK_API_KEY not set, using raw titles")
+        logger.warning("⚠️ DEEPSEEK_API_KEY not set")
 
-    # 加载配置
     with open("config.yaml", "r") as f:
         config = yaml.safe_load(f)
 
-    # Step 0: 获取价格
     logger.info("📊 Step 0: Fetching market prices...")
     prices = fetch_btc_price()
     if prices.get("price"):
@@ -419,8 +417,7 @@ def main():
         change_str = f"{change:+.2f}%" if change else ""
         logger.info(f"   BTC: ${prices['price']:,.0f} {change_str}")
 
-    # Step 1: 获取 RSS
-    logger.info("\n📥 Step 1: Fetching RSS feeds...")
+    logger.info("\n📥 Step 1: Fetching RSS feeds (parallel)...")
     fetcher = RSSFetcher(config)
     articles = fetcher.fetch_all()
 
@@ -428,7 +425,6 @@ def main():
         logger.warning("No articles found!")
         return
 
-    # Step 2: 发送到 Telegram
     print()
     logger.info("📋 Preview:")
     for i, a in enumerate(articles[:5], 1):
