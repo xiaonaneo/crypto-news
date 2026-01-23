@@ -8,6 +8,8 @@ crons = ["0 0,4,8,12,16,20 * * *"]  # 每4小时，北京时间 8:00, 12:00, 16:
 [vars]
 TZ = "Asia/Shanghai"
 
-[secrets]
-TELEGRAM_BOT_TOKEN
-TELEGRAM_CHAT_ID
+# Routes - set your custom domain here, or use workers.dev
+# [[routes]]
+# domain = "your-domain.com"
+
+# Secrets should be set via: npx wrangler secret put TELEGRAM_BOT_TOKEN
