@@ -154,25 +154,28 @@ class CryptoNewsBriefing:
             if not articles:
                 logger.warning("No articles to summarize")
             
-            # Step 4: Send to Telegram
+            # Step 4: Send to Telegram (only if there are articles)
             if self.telegram_bot:
-                logger.info("📤 Step 4: Sending to Telegram...")
-                success = self.telegram_bot.send_briefing_sync(articles, prices)
-                
-                if success:
-                    logger.info("✓ Briefing completed successfully!")
-                    # Update last push timestamp
-                    self.processor.set_last_push_timestamp(datetime.now(timezone.utc).astimezone(BJ_TIMEZONE))
+                if articles:
+                    logger.info("📤 Step 4: Sending to Telegram...")
+                    success = self.telegram_bot.send_briefing_sync(articles, prices)
+
+                    if success:
+                        logger.info("✓ Briefing completed successfully!")
+                        self.processor.set_last_push_timestamp(datetime.now(timezone.utc).astimezone(BJ_TIMEZONE))
+                        return True
+                    else:
+                        logger.error("✗ Failed to send to Telegram")
+                        return False
                 else:
-                    logger.error("✗ Failed to send to Telegram")
-                
-                return success
+                    logger.info("📋 Step 4: No new articles to send, skipping Telegram notification")
+                    return True
             else:
                 logger.info("📋 Step 4: Telegram not configured, skipping send")
                 logger.info(f"Found {len(articles)} articles:")
                 for i, article in enumerate(articles[:5], 1):
                     logger.info(f"  {i}. [{article['source']}] {article['title'][:50]}...")
-                
+
                 return bool(articles)
         
         except Exception as e:
