@@ -30,28 +30,28 @@ rss_sources:
   enabled: true
   priority: 2
   crypto_only: true
-
-# 有问题的源 (暂时禁用)
 - name: Bitcoin Magazine
   url: https://bitcoinmagazine.com/feed
-  enabled: false
+  enabled: true
   priority: 2
   crypto_only: true
 - name: Decrypt
   url: https://decrypt.com/feed
-  enabled: false
+  enabled: true
   priority: 2
   crypto_only: true
 - name: CryptoSlate
   url: https://cryptoslate.com/feed/
-  enabled: false
+  enabled: true
   priority: 2
   crypto_only: true
 - name: The Block
   url: https://www.theblock.co/rss
-  enabled: false
+  enabled: true
   priority: 2
   crypto_only: true
+
+# 主流财经媒体 (crypto_only: false，需要关键词过滤)
 - name: Reuters Crypto
   url: https://www.reuters.com/rssFeed/cryptocurrencyNews
   enabled: false
