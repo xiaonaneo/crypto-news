@@ -104,12 +104,12 @@ crypto_keywords:
 - token
 - digital asset
 scheduler:
-  interval_hours: 6
+  interval_hours: 4
   timezone: Asia/Shanghai
   run_at_start: false
-  cron_hour: "6,12,18,0"
+  cron_hour: "0,4,8,12,16,20"
 processing:
-  hours_lookback: 6
+  hours_lookback: 4
   max_articles: 10
   deduplication: true
 ai_summarization:
