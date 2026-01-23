@@ -1,6 +1,6 @@
 # 📰 Crypto News Briefing
 
-Automated crypto currency news briefing that fetches from major English financial news sources and Twitter/X, then sends a formatted digest to Telegram every 2 hours.
+Automated crypto currency news briefing that fetches from major English financial news sources and Twitter/X, then sends a formatted digest to Telegram every 4 hours.
 
 ## 🌟 Features
 
@@ -8,7 +8,7 @@ Automated crypto currency news briefing that fetches from major English financia
 - 🐦 **Twitter/X Monitoring**: Track top crypto analysts and influencers
 - 🤖 **AI Summarization**: Optional Claude/GPT summarization (disabled by default)
 - 📱 **Telegram Delivery**: Beautiful formatted messages with Markdown
-- ⏰ **Scheduled Delivery**: Every 2 hours automatically
+- ⏰ **Scheduled Delivery**: Every 4 hours automatically
 - 🔄 **Deduplication**: Smart article deduplication using SQLite
 - 📊 **Smart Ranking**: Articles ranked by recency, source authority, and engagement
 
@@ -95,7 +95,7 @@ crypto_keywords:
 
 # Scheduling
 scheduler:
-  interval_hours: 2  # Change frequency here
+  interval_hours: 4  # Change frequency here
   timezone: UTC
 
 # Processing

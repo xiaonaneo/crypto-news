@@ -53,10 +53,47 @@ class NewsProcessor:
                 processed BOOLEAN DEFAULT 0
             )
         ''')
+
+        # Create metadata table for tracking push timestamps
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
         
         conn.commit()
         conn.close()
         logger.info(f"Database initialized: {self.db_path}")
+
+    def get_last_push_timestamp(self) -> datetime:
+        """Get the timestamp of the last successful push"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT value FROM metadata WHERE key = 'last_push_timestamp'")
+        result = cursor.fetchone()
+        conn.close()
+
+        if result:
+            return datetime.fromisoformat(result[0])
+        else:
+            # Return a timestamp far in the past if no previous push
+            return datetime.now(BJ_TIMEZONE) - timedelta(days=1)
+
+    def set_last_push_timestamp(self, timestamp: datetime):
+        """Set the timestamp of the last successful push"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "INSERT OR REPLACE INTO metadata (key, value, updated_at) VALUES (?, ?, ?)",
+            ('last_push_timestamp', timestamp.isoformat(), datetime.now(BJ_TIMEZONE))
+        )
+
+        conn.commit()
+        conn.close()
     
     def is_duplicate(self, article: Dict) -> bool:
         """Check if article already exists in database"""

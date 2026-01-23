@@ -8,8 +8,11 @@ import asyncio
 import logging
 import sys
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
+
+# Beijing timezone for display
+BJ_TIMEZONE = timezone(timedelta(hours=8))
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -39,8 +42,9 @@ class CryptoNewsBriefing:
         self._setup_logging()
         
         # Initialize components
-        self.rss_fetcher = RSSFetcher(self.config)
         self.processor = NewsProcessor(self.config)
+        last_push_timestamp = self.processor.get_last_push_timestamp()
+        self.rss_fetcher = RSSFetcher(self.config, last_push_timestamp)
         self.summarizer = ArticleSummarizer(self.config)
         self.price_fetcher = PriceFetcher()
         
@@ -157,6 +161,8 @@ class CryptoNewsBriefing:
                 
                 if success:
                     logger.info("✓ Briefing completed successfully!")
+                    # Update last push timestamp
+                    self.processor.set_last_push_timestamp(datetime.now(timezone.utc).astimezone(BJ_TIMEZONE))
                 else:
                     logger.error("✗ Failed to send to Telegram")
                 

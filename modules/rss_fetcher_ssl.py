@@ -50,15 +50,19 @@ urllib.request.urlopen = _patched_urlopen
 class RSSFetcher:
     """Fetches and parses RSS feeds for crypto news"""
     
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, last_push_timestamp: datetime = None):
         self.config = config
         self.feeds = config.get('rss_sources', [])
         self.crypto_keywords = config.get('crypto_keywords', [])
-        
-        # Get hours_lookback from processing section OR top level
-        processing_config = config.get('processing', {})
-        self.lookback_hours = processing_config.get('hours_lookback', 
-                                                     config.get('hours_lookback', 24))
+
+        # Use last push timestamp if provided, otherwise fallback to hours_lookback
+        if last_push_timestamp:
+            self.cutoff_timestamp = last_push_timestamp
+        else:
+            processing_config = config.get('processing', {})
+            self.lookback_hours = processing_config.get('hours_lookback',
+                                                         config.get('hours_lookback', 24))
+            self.cutoff_timestamp = datetime.now(BJ_TIMEZONE) - timedelta(hours=self.lookback_hours)
     
     def is_crypto_related(self, title: str = "", summary: str = "", source_name: str = "", crypto_only: bool = False) -> bool:
         """Check if content is crypto-related based on keywords or if source is crypto-only"""
@@ -133,13 +137,12 @@ class RSSFetcher:
             if feed.bozo:
                 logger.warning(f"Malformed XML in {feed_info['name']}")
             
-            cutoff_time = datetime.now(BJ_TIMEZONE) - timedelta(hours=self.lookback_hours)
             crypto_only = feed_info.get('crypto_only', False)
-            
+
             for entry in feed.entries[:50]:
                 pub_date = self.parse_date(entry)
-                
-                if pub_date < cutoff_time:
+
+                if pub_date <= self.cutoff_timestamp:
                     continue
                 
                 title = entry.get('title', '')
