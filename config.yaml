@@ -50,6 +50,56 @@ rss_sources:
   enabled: true
   priority: 2
   crypto_only: true
+- name: CoinGecko Blog
+  url: https://www.coingecko.com/en/news/rss
+  enabled: true
+  priority: 2
+  crypto_only: true
+- name: Messari
+  url: https://messari.io/api/v1/news/feed
+  enabled: true
+  priority: 2
+  crypto_only: true
+- name: Bankless
+  url: https://bankless.com/rss
+  enabled: true
+  priority: 2
+  crypto_only: true
+- name: Unchained
+  url: https://unchainedpodcast.com/feed/
+  enabled: true
+  priority: 2
+  crypto_only: true
+- name: 深潮TechFlow
+  url: https://techflowpublic.s3.amazonaws.com/feed
+  enabled: true
+  priority: 2
+  crypto_only: true
+- name: Odaily星球日报
+  url: https://www.odaily.news/feed
+  enabled: true
+  priority: 2
+  crypto_only: true
+- name: Yahoo Finance Crypto
+  url: https://finance.yahoo.com/news/rssindex/tagged/cryptocurrency
+  enabled: true
+  priority: 2
+  crypto_only: true
+- name: Forbes Crypto
+  url: https://www.forbes.com/real-time/feed2/
+  enabled: true
+  priority: 3
+  crypto_only: true
+- name: Benzinga Crypto
+  url: https://www.benzinga.com/category/bitcoin/feed
+  enabled: true
+  priority: 2
+  crypto_only: true
+- name: CryptoMoon
+  url: https://cryptomoon.com/feed/
+  enabled: true
+  priority: 2
+  crypto_only: true
 
 # 主流财经媒体 (crypto_only: false，需要关键词过滤)
 - name: Reuters Crypto
