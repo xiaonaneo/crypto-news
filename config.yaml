@@ -80,6 +80,25 @@ rss_sources:
   enabled: true
   priority: 2
   crypto_only: true
+# New feeds added - need to verify correct RSS URLs
+# BlockBeats: URL needs verification - attempted: https://www.blockbeats.com/rss, https://www.theblockbeats.info/rss
+- name: BlockBeats
+  url: https://www.blockbeats.com/rss
+  enabled: false  # Disabled until correct RSS URL is found
+  priority: 2
+  crypto_only: true
+# PANews: URL needs verification - attempted: https://www.panewslab.com/rss, https://www.panewslab.com/zh/rss/index.xml
+- name: PANews
+  url: https://www.panewslab.com/rss
+  enabled: false  # Disabled until correct RSS URL is found
+  priority: 2
+  crypto_only: true
+# Foresight News: URL needs verification - attempted: https://www.foresightnews.pro/rss, https://foresightnews.pro/rss.xml
+- name: Foresight News
+  url: https://www.foresightnews.pro/rss
+  enabled: false  # Disabled until correct RSS URL is found
+  priority: 2
+  crypto_only: true
 
 # 以下信源已移除（无法访问）：
 # - CryptoSlate: HTTP 403 (需要反爬虫)
