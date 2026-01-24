@@ -88,21 +88,144 @@ rss_sources:
 # - Bankless: 播客，无公开新闻RSS
 
 crypto_keywords:
+# Core cryptocurrencies
 - bitcoin
 - ethereum
-- crypto
-- cryptocurrency
-- blockchain
 - btc
 - eth
 - solana
+- sol
+- cardano
+- ada
+- polkadot
+- dot
+- chainlink
+- link
+- avalanche
+- avax
+- polygon
+- matic
+- cosmos
+- atom
+
+# General crypto terms
+- crypto
+- cryptocurrency
+- blockchain
+- decentralized finance
+- defi
+- decentralized exchange
+- dex
+- smart contract
+- web3
+- nft
+- non-fungible token
+- digital asset
+- digital currency
+- altcoin
+- stablecoin
+- mining
+- staking
+- yield farming
+- liquidity pool
+- decentralized autonomous organization
+- dao
+
+# Major platforms and companies
 - binance
 - coinbase
-- defi
-- nft
-- web3
-- token
-- digital asset
+- kraken
+- gemini
+- ftx
+- bybit
+- huobi
+- okx
+- crypto.com
+- robinhood crypto
+
+# DeFi protocols
+- uniswap
+- aave
+- compound
+- makerdao
+- curve finance
+- sushi swap
+- pancakeswap
+- yearn finance
+- synthetix
+
+# Token standards and concepts
+- erc-20
+- erc-721
+- erc-1155
+- bnb smart chain
+- layer 2
+- rollup
+- zero knowledge proof
+- zk-rollup
+
+# Market terms
+- market cap
+- market capitalization
+- trading volume
+- price action
+- bull run
+- bear market
+- crypto market
+- tokenomics
+- ico
+- ido
+- airdrop
+
+# Technical terms
+- consensus mechanism
+- proof of work
+- proof of stake
+- sharding
+- interoperability
+- cross-chain
+- bridge protocol
+- oracle network
+
+# Regulatory and institutional
+- sec
+- cftc
+- fatf
+- institutional adoption
+- crypto regulation
+- compliance
+- kyc
+- aml
+
+exclude_keywords:
+# Financial terms that might appear in general finance news
+- stock market
+- stock exchange
+- wall street
+- dow jones
+- nasdaq
+- s&p 500
+- federal reserve
+- interest rate
+- inflation
+- recession
+- mortgage
+- real estate
+- commodity
+- oil price
+- gold price
+
+# Non-crypto blockchain mentions
+- supply chain
+- healthcare blockchain
+- iot blockchain
+- enterprise blockchain
+
+# Gambling and non-crypto games
+- casino
+- gambling
+- lottery
+- sports betting
 scheduler:
   interval_hours: 4
   timezone: Asia/Shanghai

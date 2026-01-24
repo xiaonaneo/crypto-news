@@ -54,6 +54,7 @@ class RSSFetcher:
         self.config = config
         self.feeds = config.get('rss_sources', [])
         self.crypto_keywords = config.get('crypto_keywords', [])
+        self.exclude_keywords = config.get('exclude_keywords', [])
 
         # Use last push timestamp if provided, otherwise fallback to hours_lookback
         if last_push_timestamp:
@@ -65,16 +66,43 @@ class RSSFetcher:
             self.cutoff_timestamp = datetime.now(BJ_TIMEZONE) - timedelta(hours=self.lookback_hours)
     
     def is_crypto_related(self, title: str = "", summary: str = "", source_name: str = "", crypto_only: bool = False) -> bool:
-        """Check if content is crypto-related based on keywords or if source is crypto-only"""
+        """Check if content is crypto-related using enhanced keyword analysis"""
         # If source is crypto-only, skip keyword filtering
         if crypto_only:
             return True
-        
+
         if not title and not summary:
-            return True
-        
+            return False
+
         text = f"{title} {summary}".lower()
-        return any(kw.lower() in text for kw in self.crypto_keywords)
+
+        # First, check for exclusion keywords - if they appear prominently, likely not crypto
+        exclude_score = sum(1 for kw in self.exclude_keywords if kw.lower() in text)
+        if exclude_score >= 2:  # Multiple finance/stock mentions suggest non-crypto content
+            return False
+
+        # Check for crypto keywords with scoring system
+        crypto_score = 0
+        found_keywords = []
+
+        for kw in self.crypto_keywords:
+            if kw.lower() in text:
+                found_keywords.append(kw)
+                # Weight different types of keywords differently
+                if kw in ['bitcoin', 'ethereum', 'btc', 'eth']:  # Core crypto terms
+                    crypto_score += 3
+                elif kw in ['crypto', 'cryptocurrency', 'blockchain']:  # General terms
+                    crypto_score += 2
+                else:  # Specific terms
+                    crypto_score += 1
+
+        # Require minimum crypto relevance score (at least 2 points of crypto relevance)
+        if crypto_score >= 2:
+            logger.debug(f"Crypto-related article: '{title[:50]}...' (score: {crypto_score}, keywords: {found_keywords[:3]})")
+            return True
+        else:
+            logger.debug(f"Non-crypto article: '{title[:50]}...' (score: {crypto_score})")
+            return False
     
     def get_article_hash(self, url: str) -> str:
         """Generate unique hash for article deduplication"""
