@@ -20,46 +20,6 @@ rss_sources:
   enabled: true
   priority: 2
   crypto_only: true
-- name: CryptoPotato
-  url: https://cryptopotato.com/feed/
-  enabled: true
-  priority: 2
-  crypto_only: true
-- name: CryptoBriefing
-  url: https://cryptobriefing.com/feed/
-  enabled: true
-  priority: 2
-  crypto_only: true
-- name: The Daily Hodl
-  url: https://dailyhodl.com/feed/
-  enabled: true
-  priority: 2
-  crypto_only: true
-- name: Decrypt
-  url: https://decrypt.co/feed
-  enabled: true
-  priority: 2
-  crypto_only: true
-- name: CoinGecko Research
-  url: https://coingecko.com/research.atom
-  enabled: true
-  priority: 2
-  crypto_only: true
-- name: Messari
-  url: https://messari.io/rss
-  enabled: true
-  priority: 2
-  crypto_only: true
-- name: Benzinga Crypto
-  url: https://feeds2.benzinga.com/markets/cryptocurrency
-  enabled: true
-  priority: 2
-  crypto_only: true
-- name: Unchained
-  url: https://unchainedpodcast.com/feed/
-  enabled: true
-  priority: 2
-  crypto_only: true
 - name: 深潮TechFlow
   url: https://techflowpost.substack.com/feed
   enabled: true
@@ -72,11 +32,6 @@ rss_sources:
   crypto_only: true
 - name: Yahoo Finance Crypto
   url: https://finance.yahoo.com/news/rssindex/tagged/cryptocurrency
-  enabled: true
-  priority: 2
-  crypto_only: true
-- name: CryptoMoon
-  url: https://cryptomoon.com/feed/
   enabled: true
   priority: 2
   crypto_only: true
