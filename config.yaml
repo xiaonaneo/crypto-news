@@ -87,12 +87,12 @@ rss_sources:
   enabled: false  # Disabled until correct RSS URL is found
   priority: 2
   crypto_only: true
-# PANews: URL needs verification - attempted: https://www.panewslab.com/rss, https://www.panewslab.com/zh/rss/index.xml
+# PANews: Found working URL from GitHub search - PANews is a reputable crypto news site
 - name: PANews
-  url: https://www.panewslab.com/rss
-  enabled: false  # Disabled until correct RSS URL is found
+  url: https://rss.panewslab.com/zh/gtimg/rss
+  enabled: true
   priority: 2
-  crypto_only: true
+  crypto_only: true  # Trust PANews as reputable crypto news source, skip keyword filtering
 # Foresight News: URL needs verification - attempted: https://www.foresightnews.pro/rss, https://foresightnews.pro/rss.xml
 - name: Foresight News
   url: https://www.foresightnews.pro/rss
