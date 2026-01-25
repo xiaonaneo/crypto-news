@@ -30,28 +30,15 @@ rss_sources:
   enabled: true
   priority: 2
   crypto_only: true
-- name: Yahoo Finance Crypto
-  url: https://finance.yahoo.com/news/rssindex/tagged/cryptocurrency
-  enabled: true
-  priority: 2
-  crypto_only: true
-# New feeds added - need to verify correct RSS URLs
-# BlockBeats: URL needs verification - attempted: https://www.blockbeats.com/rss, https://www.theblockbeats.info/rss
-- name: BlockBeats
-  url: https://www.blockbeats.com/rss
-  enabled: false  # Disabled until correct RSS URL is found
-  priority: 2
-  crypto_only: true
-# PANews: Found working URL from GitHub search - PANews is a reputable crypto news site
 - name: PANews
   url: https://rss.panewslab.com/zh/gtimg/rss
   enabled: true
   priority: 2
   crypto_only: true  # Trust PANews as reputable crypto news source, skip keyword filtering
-# Foresight News: URL needs verification - attempted: https://www.foresightnews.pro/rss, https://foresightnews.pro/rss.xml
+# Foresight News: Re-enabled for additional Chinese crypto news coverage
 - name: Foresight News
   url: https://www.foresightnews.pro/rss
-  enabled: false  # Disabled until correct RSS URL is found
+  enabled: true
   priority: 2
   crypto_only: true
 
