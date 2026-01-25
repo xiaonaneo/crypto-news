@@ -67,10 +67,6 @@ class RSSFetcher:
     
     def is_crypto_related(self, title: str = "", summary: str = "", source_name: str = "", crypto_only: bool = False) -> bool:
         """Check if content is crypto-related using enhanced keyword analysis"""
-        # If source is crypto-only, skip keyword filtering
-        if crypto_only:
-            return True
-
         if not title and not summary:
             return False
 
@@ -79,6 +75,7 @@ class RSSFetcher:
         # First, check for exclusion keywords - if they appear prominently, likely not crypto
         exclude_score = sum(1 for kw in self.exclude_keywords if kw.lower() in text)
         if exclude_score >= 2:  # Multiple finance/stock mentions suggest non-crypto content
+            logger.debug(f"Filtered out (exclusion keywords): '{title[:50]}...'")
             return False
 
         # Check for crypto keywords with scoring system
@@ -96,8 +93,11 @@ class RSSFetcher:
                 else:  # Specific terms
                     crypto_score += 1
 
-        # Require minimum crypto relevance score (at least 2 points of crypto relevance)
-        if crypto_score >= 2:
+        # For crypto-only sources, require at least 1 crypto keyword
+        # For other sources, require at least 2 crypto relevance score
+        min_score = 1 if crypto_only else 2
+
+        if crypto_score >= min_score:
             logger.debug(f"Crypto-related article: '{title[:50]}...' (score: {crypto_score}, keywords: {found_keywords[:3]})")
             return True
         else:

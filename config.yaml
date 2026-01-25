@@ -33,36 +33,60 @@ rss_sources:
 # - Bankless: 播客，无公开新闻RSS
 
 crypto_keywords:
-# Core cryptocurrencies
-- bitcoin
-- ethereum
+- 比特币
+- 以太坊
 - btc
 - eth
 - solana
 - sol
-- cardano
+- 莱特币
+- ltc
+- 狗狗币
+- doge
+- 瑞波币
+- xrp
+- 卡尔达诺
 - ada
-- polkadot
+- 波卡
 - dot
 - chainlink
 - link
-- avalanche
+- 雪崩
 - avax
 - polygon
 - matic
 - cosmos
 - atom
+- bitcoin
+- ethereum
+- cardano
+- polkadot
+- avalanche
 
-# General crypto terms
+- 加密货币
+- 数字货币
+- 虚拟货币
+- 区块链
+- 去中心化金融
+- defi
+- 去中心化交易所
+- 智能合约
+- web3
+- nft
+- 非同质化代币
+- 数字资产
+- 山寨币
+- 稳定币
+- 挖矿
+- 质押
+- 流动性
+- dao
 - crypto
 - cryptocurrency
 - blockchain
 - decentralized finance
-- defi
 - decentralized exchange
-- dex
 - smart contract
-- web3
 - nft
 - non-fungible token
 - digital asset
@@ -74,29 +98,28 @@ crypto_keywords:
 - yield farming
 - liquidity pool
 - decentralized autonomous organization
-- dao
 
-# Major platforms and companies
+- 币安
 - binance
 - coinbase
+- 火币
+- bybit
+- 欧易
+- okx
+- crypto.com
 - kraken
 - gemini
 - ftx
-- bybit
-- huobi
-- okx
-- crypto.com
 - robinhood crypto
 
-# DeFi protocols
 - uniswap
 - aave
 - compound
 - makerdao
-- curve finance
-- sushi swap
+- curve
+- sushi
 - pancakeswap
-- yearn finance
+- yearn
 - synthetix
 
 # Token standards and concepts
