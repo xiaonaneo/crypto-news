@@ -20,11 +20,7 @@ rss_sources:
   enabled: true
   priority: 2
   crypto_only: true
-- name: PANews
-  url: https://rss.panewslab.com/zh/gtimg/rss
-  enabled: true
-  priority: 2
-  crypto_only: true
+
 
 # 以下信源已移除（无法访问）：
 # - CryptoSlate: HTTP 403 (需要反爬虫)
