@@ -35,10 +35,10 @@ rss_sources:
   enabled: true
   priority: 2
   crypto_only: true  # Trust PANews as reputable crypto news source, skip keyword filtering
-# Foresight News: Re-enabled for additional Chinese crypto news coverage
+# Foresight News: Disabled - no public RSS feed available
 - name: Foresight News
   url: https://www.foresightnews.pro/rss
-  enabled: true
+  enabled: false  # No public RSS feed, API access required
   priority: 2
   crypto_only: true
 
