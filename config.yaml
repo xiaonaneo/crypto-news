@@ -20,25 +20,9 @@ rss_sources:
   enabled: true
   priority: 2
   crypto_only: true
-- name: 深潮TechFlow
-  url: https://techflowpost.substack.com/feed
-  enabled: true
-  priority: 2
-  crypto_only: true
-- name: Odaily星球日报
-  url: https://www.odaily.news/feed
-  enabled: true
-  priority: 2
-  crypto_only: true
 - name: PANews
   url: https://rss.panewslab.com/zh/gtimg/rss
   enabled: true
-  priority: 2
-  crypto_only: true  # Trust PANews as reputable crypto news source, skip keyword filtering
-# Foresight News: Disabled - no public RSS feed available
-- name: Foresight News
-  url: https://www.foresightnews.pro/rss
-  enabled: false  # No public RSS feed, API access required
   priority: 2
   crypto_only: true
 
