@@ -20,6 +20,16 @@ rss_sources:
   enabled: true
   priority: 2
   crypto_only: true
+- name: Decrypt
+  url: https://decrypt.co/feed
+  enabled: true
+  priority: 2
+  crypto_only: true
+- name: BeInCrypto
+  url: https://beincrypto.com/feed/
+  enabled: true
+  priority: 2
+  crypto_only: true
 
 
 # 以下信源已移除（无法访问）：
